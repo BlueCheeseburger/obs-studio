@@ -536,7 +536,7 @@ void AutoConfigStreamPage::UpdateMoreInfoLink()
 	}
 
 	QString serviceName = ui->service->currentText();
-	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+	OBSProperties props = obs_get_service_properties("rtmp_common");
 	obs_property_t *services = obs_properties_get(props, "service");
 
 	OBSDataAutoRelease settings = obs_data_create();
@@ -552,7 +552,6 @@ void AutoConfigStreamPage::UpdateMoreInfoLink()
 		ui->moreInfoButton->setTargetUrl(QUrl(more_info_link));
 		ui->moreInfoButton->show();
 	}
-	obs_properties_destroy(props);
 }
 
 void AutoConfigStreamPage::UpdateKeyLink()
@@ -561,7 +560,7 @@ void AutoConfigStreamPage::UpdateKeyLink()
 	QString customServer = ui->customServer->text().trimmed();
 	QString streamKeyLink;
 
-	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+	OBSProperties props = obs_get_service_properties("rtmp_common");
 	obs_property_t *services = obs_properties_get(props, "service");
 
 	OBSDataAutoRelease settings = obs_data_create();
@@ -598,12 +597,11 @@ void AutoConfigStreamPage::UpdateKeyLink()
 		ui->streamKeyButton->setTargetUrl(QUrl(streamKeyLink));
 		ui->streamKeyButton->show();
 	}
-	obs_properties_destroy(props);
 }
 
 void AutoConfigStreamPage::LoadServices(bool showAll)
 {
-	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+	OBSProperties props = obs_get_service_properties("rtmp_common");
 
 	OBSDataAutoRelease settings = obs_data_create();
 
@@ -643,8 +641,6 @@ void AutoConfigStreamPage::LoadServices(bool showAll)
 			ui->service->setCurrentIndex(idx);
 	}
 
-	obs_properties_destroy(props);
-
 	ui->service->blockSignals(false);
 }
 
@@ -661,7 +657,7 @@ void AutoConfigStreamPage::UpdateServerList()
 		lastService = serviceName;
 	}
 
-	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+	OBSProperties props = obs_get_service_properties("rtmp_common");
 	obs_property_t *services = obs_properties_get(props, "service");
 
 	OBSDataAutoRelease settings = obs_data_create();
@@ -679,8 +675,6 @@ void AutoConfigStreamPage::UpdateServerList()
 		const char *server = obs_property_list_item_string(servers, i);
 		ui->server->addItem(name, server);
 	}
-
-	obs_properties_destroy(props);
 }
 
 void AutoConfigStreamPage::UpdateCompleted()
