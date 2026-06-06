@@ -2361,6 +2361,8 @@ static obs_source_t *obs_load_source_type(obs_data_t *source_data, bool is_priva
 	if (!source->private_settings)
 		source->private_settings = obs_data_create();
 
+	source->output_filter = (uint32_t)obs_data_get_int(source->private_settings, "output_filter");
+
 	if (filters) {
 		size_t count = obs_data_array_count(filters);
 

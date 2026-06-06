@@ -562,7 +562,9 @@ void SimpleOutput::UpdateRecordingSettings()
 inline void SimpleOutput::SetupOutputs()
 {
 	SimpleOutput::Update();
-	obs_encoder_set_video(videoStreaming, obs_get_video());
+	video_t *sv = streamVideo ? streamVideo : obs_get_video();
+	video_t *rv = recordVideo ? recordVideo : obs_get_video();
+	obs_encoder_set_video(videoStreaming, sv);
 	obs_encoder_set_audio(audioStreaming, obs_get_audio());
 	obs_encoder_set_audio(audioArchive, obs_get_audio());
 	int tracks = config_get_int(main->Config(), "SimpleOutput", "RecTracks");
@@ -571,9 +573,9 @@ inline void SimpleOutput::SetupOutputs()
 
 	if (usingRecordingPreset) {
 		if (ffmpegOutput) {
-			obs_output_set_media(fileOutput, obs_get_video(), obs_get_audio());
+			obs_output_set_media(fileOutput, rv, obs_get_audio());
 		} else {
-			obs_encoder_set_video(videoRecording, obs_get_video());
+			obs_encoder_set_video(videoRecording, rv);
 			if (flv) {
 				obs_encoder_set_audio(audioRecording, obs_get_audio());
 			} else {

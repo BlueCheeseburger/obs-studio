@@ -43,6 +43,11 @@ struct BasicOutputHandler {
 	obs_scene_t *vCamSourceScene = nullptr;
 	obs_sceneitem_t *vCamSourceSceneItem = nullptr;
 
+	/* Separate video mixes for stream/record output filtering.
+	 * Non-null only when at least one source has an output_filter set. */
+	video_t *streamVideo = nullptr;
+	video_t *recordVideo = nullptr;
+
 	std::unique_ptr<WHIPSimulcastEncoders> whipSimulcastEncoders;
 
 	std::string outputType;
@@ -68,7 +73,11 @@ struct BasicOutputHandler {
 
 	BasicOutputHandler(OBSBasic *main_);
 
-	virtual ~BasicOutputHandler() {};
+	virtual ~BasicOutputHandler()
+	{
+		obs_remove_video_mix(streamVideo);
+		obs_remove_video_mix(recordVideo);
+	};
 
 	virtual std::shared_future<void> SetupStreaming(obs_service_t *service,
 							SetupStreamingContinuation_t continuation) = 0;

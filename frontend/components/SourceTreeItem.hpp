@@ -47,6 +47,7 @@ private:
 	QSpacerItem *spacer = nullptr;
 	QCheckBox *expand = nullptr;
 	QLabel *iconLabel = nullptr;
+	QLabel *outputFilterLabel = nullptr;
 	QCheckBox *vis = nullptr;
 	QCheckBox *lock = nullptr;
 	QHBoxLayout *boxLayout = nullptr;
@@ -63,6 +64,7 @@ private:
 	virtual void paintEvent(QPaintEvent *event) override;
 
 	void ExitEditModeInternal(bool save);
+	void UpdateOutputFilterLabel();
 
 private slots:
 	void Clear();
@@ -72,6 +74,7 @@ private slots:
 
 	void VisibilityChanged(bool visible);
 	void LockedChanged(bool locked);
+	void OutputFilterChanged();
 
 	void ExpandClicked(bool checked);
 

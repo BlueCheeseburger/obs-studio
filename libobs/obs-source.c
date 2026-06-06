@@ -112,6 +112,7 @@ static const char *source_signals[] = {
 	"void media_previous(ptr source)",
 	"void media_started(ptr source)",
 	"void media_ended(ptr source)",
+	"void output_filter_changed(ptr source, int filter)",
 	NULL,
 };
 
@@ -5615,6 +5616,28 @@ obs_data_t *obs_source_get_private_settings(obs_source_t *source)
 
 	obs_data_addref(source->private_settings);
 	return source->private_settings;
+}
+
+enum obs_source_output_filter obs_source_get_output_filter(const obs_source_t *source)
+{
+	if (!obs_ptr_valid(source, "obs_source_get_output_filter"))
+		return OBS_SOURCE_OUTPUT_FILTER_ALL;
+	return (enum obs_source_output_filter)source->output_filter;
+}
+
+void obs_source_set_output_filter(obs_source_t *source, enum obs_source_output_filter filter)
+{
+	if (!obs_ptr_valid(source, "obs_source_set_output_filter"))
+		return;
+	source->output_filter = (uint32_t)filter;
+	obs_data_set_int(source->private_settings, "output_filter", (long long)filter);
+
+	struct calldata params;
+	uint8_t stack[128];
+	calldata_init_fixed(&params, stack, sizeof(stack));
+	calldata_set_ptr(&params, "source", source);
+	calldata_set_int(&params, "filter", (long long)filter);
+	signal_handler_signal(source->context.signals, "output_filter_changed", &params);
 }
 
 void obs_source_set_async_decoupled(obs_source_t *source, bool decouple)

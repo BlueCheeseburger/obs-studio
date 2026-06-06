@@ -178,6 +178,42 @@ void obs_view_remove(obs_view_t *view)
 	pthread_mutex_unlock(&obs->video.mixes_mutex);
 }
 
+video_t *obs_add_output_filtered_mix(uint32_t render_output_filter)
+{
+	obs_canvas_t *canvas = obs->data.main_canvas;
+	if (!canvas || !canvas->mix)
+		return NULL;
+
+	struct obs_core_video_mix *mix = obs_create_video_mix(&canvas->mix->ovi);
+	if (!mix)
+		return NULL;
+
+	mix->view = &canvas->view;
+	mix->render_output_filter = render_output_filter;
+
+	pthread_mutex_lock(&obs->video.mixes_mutex);
+	da_push_back(obs->video.mixes, &mix);
+	pthread_mutex_unlock(&obs->video.mixes_mutex);
+
+	return mix->video;
+}
+
+void obs_remove_video_mix(video_t *video)
+{
+	if (!video)
+		return;
+
+	pthread_mutex_lock(&obs->video.mixes_mutex);
+	for (size_t i = 0, num = obs->video.mixes.num; i < num; i++) {
+		struct obs_core_video_mix *mix = obs->video.mixes.array[i];
+		if (mix->video == video) {
+			mix->view = NULL;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&obs->video.mixes_mutex);
+}
+
 void obs_view_enum_video_info(obs_view_t *view, bool (*enum_proc)(void *, struct obs_video_info *), void *param)
 {
 	pthread_mutex_lock(&obs->video.mixes_mutex);
