@@ -976,6 +976,14 @@ EXPORT video_t *obs_view_add(obs_view_t *view);
 /** Adds a view to the main render loop, with custom video settings */
 EXPORT video_t *obs_view_add2(obs_view_t *view, struct obs_video_info *ovi);
 
+/** Adds a filtered video mix for the main canvas view.
+ *  filter: OBS_SOURCE_OUTPUT_FILTER_STREAM or OBS_SOURCE_OUTPUT_FILTER_RECORD.
+ *  Call obs_remove_video_mix() to release it. */
+EXPORT video_t *obs_add_output_filtered_mix(uint32_t render_output_filter);
+
+/** Removes a previously added filtered video mix by its video handle. */
+EXPORT void obs_remove_video_mix(video_t *video);
+
 /** Removes a view from the main render loop */
 EXPORT void obs_view_remove(obs_view_t *view);
 
@@ -1372,6 +1380,16 @@ EXPORT obs_data_t *obs_source_get_private_settings(obs_source_t *item);
 
 EXPORT obs_data_array_t *obs_source_backup_filters(obs_source_t *source);
 EXPORT void obs_source_restore_filters(obs_source_t *source, obs_data_array_t *array);
+
+/** Output filter: controls which output types this source is visible in. */
+enum obs_source_output_filter {
+	OBS_SOURCE_OUTPUT_FILTER_ALL = 0,    /**< Visible in all outputs (default) */
+	OBS_SOURCE_OUTPUT_FILTER_STREAM = 1, /**< Visible in stream output only */
+	OBS_SOURCE_OUTPUT_FILTER_RECORD = 2, /**< Visible in recording output only */
+};
+
+EXPORT enum obs_source_output_filter obs_source_get_output_filter(const obs_source_t *source);
+EXPORT void obs_source_set_output_filter(obs_source_t *source, enum obs_source_output_filter filter);
 
 /* ------------------------------------------------------------------------- */
 /* Functions used by sources */

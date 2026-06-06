@@ -470,7 +470,7 @@ inline void AdvancedOutput::SetupFFmpeg()
 	}
 
 	obs_output_set_mixers(fileOutput, aMixes);
-	obs_output_set_media(fileOutput, obs_get_video(), obs_get_audio());
+	obs_output_set_media(fileOutput, recordVideo ? recordVideo : obs_get_video(), obs_get_audio());
 	obs_output_update(fileOutput, settings);
 }
 
@@ -536,9 +536,11 @@ inline void AdvancedOutput::UpdateAudioSettings()
 
 void AdvancedOutput::SetupOutputs()
 {
-	obs_encoder_set_video(videoStreaming, obs_get_video());
+	video_t *sv = streamVideo ? streamVideo : obs_get_video();
+	video_t *rv = recordVideo ? recordVideo : obs_get_video();
+	obs_encoder_set_video(videoStreaming, sv);
 	if (videoRecording)
-		obs_encoder_set_video(videoRecording, obs_get_video());
+		obs_encoder_set_video(videoRecording, rv);
 	for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
 		obs_encoder_set_audio(streamTrack[i], obs_get_audio());
 		obs_encoder_set_audio(recordTrack[i], obs_get_audio());

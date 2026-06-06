@@ -219,6 +219,9 @@ const char *GetStreamOutputType(const obs_service_t *service)
 
 BasicOutputHandler::BasicOutputHandler(OBSBasic *main_) : main(main_)
 {
+	streamVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_STREAM);
+	recordVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_RECORD);
+
 	if (main->vcamEnabled) {
 		virtualCam = obs_output_create(VIRTUAL_CAM_ID, "virtualcam_output", nullptr, nullptr);
 

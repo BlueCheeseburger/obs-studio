@@ -1074,10 +1074,21 @@ static void scene_video_render(void *data, gs_effect_t *effect)
 	gs_blend_state_push();
 	gs_reset_blend_state();
 
+	uint32_t render_filter = obs_get_render_output_filter();
+
 	item = scene->first_item;
 	while (item) {
-		if (item->user_visible || transition_active(item->hide_transition))
-			render_item(item);
+		bool vis = item->user_visible || transition_active(item->hide_transition);
+		if (vis) {
+			/* Skip items that don't match the current output filter.
+			 * render_filter == 0 means "all outputs" — no filtering applied.
+			 * item->source->output_filter == 0 means the source has no restriction. */
+			uint32_t src_filter = item->source->output_filter;
+			bool filter_ok = (render_filter == 0) || (src_filter == 0) ||
+					 (src_filter == render_filter);
+			if (filter_ok)
+				render_item(item);
+		}
 
 		item = item->next;
 	}

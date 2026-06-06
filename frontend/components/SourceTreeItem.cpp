@@ -6,6 +6,7 @@
 #include <qt-wrappers.hpp>
 
 #include <QCheckBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPainter>
 
@@ -86,6 +87,12 @@ SourceTreeItem::SourceTreeItem(SourceTree *tree_, OBSSceneItem sceneitem_) : tre
 	lock->setAccessibleDescription(QTStr("Basic.Main.Sources.LockDescription").arg(name));
 	lock->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
+	outputFilterLabel = new QLabel();
+	outputFilterLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	outputFilterLabel->setStyleSheet("background: none; font-size: 9px;");
+	outputFilterLabel->setToolTip(QTStr("OutputFilter.Tooltip"));
+	UpdateOutputFilterLabel();
+
 	label = new OBSSourceLabel(source);
 	label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	label->setAttribute(Qt::WA_TranslucentBackground);
@@ -115,6 +122,7 @@ SourceTreeItem::SourceTreeItem(SourceTree *tree_, OBSSceneItem sceneitem_) : tre
 		boxLayout->addSpacing(2);
 	}
 	boxLayout->addWidget(label);
+	boxLayout->addWidget(outputFilterLabel);
 	boxLayout->addWidget(vis);
 	boxLayout->addWidget(lock);
 
@@ -253,6 +261,18 @@ void SourceTreeItem::ReconnectSignals()
 	sigs.emplace_back(signal, "item_locked", itemLocked, this);
 	sigs.emplace_back(signal, "item_select", itemSelect, this);
 	sigs.emplace_back(signal, "item_deselect", itemDeselect, this);
+
+	/* Update the output-filter badge when another part of the UI changes
+	 * the filter on the underlying source (e.g. right-click on a different
+	 * scene that contains the same source). */
+	auto sourceOutputFilterChanged = [](void *data, calldata_t *) {
+		SourceTreeItem *this_ = static_cast<SourceTreeItem *>(data);
+		QMetaObject::invokeMethod(this_, "OutputFilterChanged");
+	};
+
+	obs_source_t *src = obs_sceneitem_get_source(sceneitem);
+	signal_handler_t *srcSignal = obs_source_get_signal_handler(src);
+	sigs.emplace_back(srcSignal, "output_filter_changed", sourceOutputFilterChanged, this);
 
 	if (obs_sceneitem_is_group(sceneitem)) {
 		obs_source_t *source = obs_sceneitem_get_source(sceneitem);
@@ -470,6 +490,26 @@ void SourceTreeItem::LockedChanged(bool locked)
 {
 	lock->setChecked(locked);
 	OBSBasic::Get()->UpdateEditMenu();
+}
+
+void SourceTreeItem::UpdateOutputFilterLabel()
+{
+	obs_source_t *source = obs_sceneitem_get_source(sceneitem);
+	auto filter = obs_source_get_output_filter(source);
+	if (filter == OBS_SOURCE_OUTPUT_FILTER_STREAM) {
+		outputFilterLabel->setText(QStringLiteral("\xF0\x9F\x93\xBA")); // 📺
+		outputFilterLabel->setVisible(true);
+	} else if (filter == OBS_SOURCE_OUTPUT_FILTER_RECORD) {
+		outputFilterLabel->setText(QStringLiteral("\xE2\x97\x89")); // ◉
+		outputFilterLabel->setVisible(true);
+	} else {
+		outputFilterLabel->setVisible(false);
+	}
+}
+
+void SourceTreeItem::OutputFilterChanged()
+{
+	UpdateOutputFilterLabel();
 }
 
 void SourceTreeItem::Update(bool force)
