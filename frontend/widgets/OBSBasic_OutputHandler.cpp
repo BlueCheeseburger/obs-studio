@@ -36,6 +36,9 @@ void OBSBasic::ResetOutputs()
 		outputHandler.reset();
 		outputHandler.reset(advOut ? CreateAdvancedOutputHandler(this) : CreateSimpleOutputHandler(this));
 
+		if (!multiStreamOutput)
+			multiStreamOutput = std::make_unique<MultiStreamOutput>(this);
+
 		emit ReplayBufEnabled(outputHandler->replayBuffer);
 
 		if (sysTrayReplayBuffer)

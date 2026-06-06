@@ -97,6 +97,14 @@ void OBSBasic::StartStreaming()
 			return;
 		}
 
+		if (multiStreamOutput) {
+			OBSOutputAutoRelease primaryOutput = outputHandler->StreamingOutput();
+			obs_encoder_t *videoEnc = obs_output_get_video_encoder(primaryOutput);
+			obs_encoder_t *audioEnc = obs_output_get_audio_encoder(primaryOutput, 0);
+			if (videoEnc && audioEnc)
+				multiStreamOutput->Start(videoEnc, audioEnc);
+		}
+
 		if (autoStartBroadcast) {
 			emit BroadcastStreamStarted(autoStopBroadcast);
 			broadcastActive = true;
@@ -127,6 +135,9 @@ void OBSBasic::StopStreaming()
 
 	if (outputHandler->StreamingActive())
 		outputHandler->StopStreaming(streamingStopping);
+
+	if (multiStreamOutput)
+		multiStreamOutput->Stop();
 
 	// special case: force reset broadcast state if
 	// no autostart and no autostop selected
@@ -166,6 +177,9 @@ void OBSBasic::ForceStopStreaming()
 
 	if (outputHandler->StreamingActive())
 		outputHandler->StopStreaming(true);
+
+	if (multiStreamOutput)
+		multiStreamOutput->Stop(true);
 
 	// special case: force reset broadcast state if
 	// no autostart and no autostop selected

@@ -232,6 +232,25 @@ void OBSBasicSettings::LoadStream1Settings()
 	ui->ignoreRecommended->setChecked(ignoreRecommended);
 	ui->whipSimulcastTotalLayers->setValue(whipSimulcastTotalLayers);
 
+	/* Multi-stream destinations */
+	config_t *config = main->Config();
+
+	auto loadDestination = [&](const char *section, QCheckBox *enable, QLineEdit *server, QLineEdit *key,
+				   const char *defaultServer) {
+		enable->setChecked(config_get_bool(config, section, "Enabled"));
+		const char *srv = config_get_string(config, section, "Server");
+		server->setText(QT_UTF8((srv && *srv) ? srv : defaultServer));
+		const char *k = config_get_string(config, section, "Key");
+		key->setText(QT_UTF8(k ? k : ""));
+	};
+
+	loadDestination("MultiStreamYouTube", ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeServer,
+			ui->multiStreamYouTubeKey, "rtmp://a.rtmp.youtube.com/live2");
+	loadDestination("MultiStreamTwitch", ui->multiStreamTwitchEnable, ui->multiStreamTwitchServer,
+			ui->multiStreamTwitchKey, "rtmp://live.twitch.tv/app");
+	loadDestination("MultiStreamTikTok", ui->multiStreamTikTokEnable, ui->multiStreamTikTokServer,
+			ui->multiStreamTikTokKey, "rtmp://push.tiktok.com/live/");
+
 	loading = false;
 
 	QMetaObject::invokeMethod(this, "UpdateResFPSLimits", Qt::QueuedConnection);
@@ -368,6 +387,22 @@ void OBSBasicSettings::SaveStream1Settings()
 		main->ResetOutputs();
 
 	SwapMultiTrack(QT_TO_UTF8(protocol));
+
+	/* Multi-stream destinations */
+	config_t *config = main->Config();
+
+	auto saveDestination = [&](const char *section, QCheckBox *enable, QLineEdit *server, QLineEdit *key) {
+		config_set_bool(config, section, "Enabled", enable->isChecked());
+		config_set_string(config, section, "Server", QT_TO_UTF8(server->text().trimmed()));
+		config_set_string(config, section, "Key", QT_TO_UTF8(key->text()));
+	};
+
+	saveDestination("MultiStreamYouTube", ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeServer,
+			ui->multiStreamYouTubeKey);
+	saveDestination("MultiStreamTwitch", ui->multiStreamTwitchEnable, ui->multiStreamTwitchServer,
+			ui->multiStreamTwitchKey);
+	saveDestination("MultiStreamTikTok", ui->multiStreamTikTokEnable, ui->multiStreamTikTokServer,
+			ui->multiStreamTikTokKey);
 }
 
 void OBSBasicSettings::UpdateMoreInfoLink()
