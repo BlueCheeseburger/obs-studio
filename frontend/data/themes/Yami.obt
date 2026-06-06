@@ -795,6 +795,11 @@ QListWidget QLineEdit:focus {
 
 /* Settings QList */
 
+OBSBasicSettings QListWidget::item {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
 OBSBasicSettings QScrollBar:vertical {
     width: var(--settings_scrollbar_size);
     margin-left: 9px;

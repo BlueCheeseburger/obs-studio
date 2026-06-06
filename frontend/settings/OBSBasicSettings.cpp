@@ -42,11 +42,43 @@
 #include <qt-wrappers.hpp>
 
 #include <QCompleter>
+#include <QDir>
+#include <QFileInfo>
 #include <QStandardItemModel>
+#include <QWheelEvent>
 
 #include <sstream>
 
 #include "moc_OBSBasicSettings.cpp"
+
+static QString SanitizePath(const QString &path)
+{
+	const QString home = QDir::homePath();
+	if (path.startsWith(home, Qt::CaseInsensitive)) {
+		const QString homeParent = QFileInfo(home).absolutePath();
+		return homeParent + "/USER" + path.mid(home.length());
+	}
+	return path;
+}
+
+static QString DesanitizePath(const QString &displayPath)
+{
+	const QString home = QDir::homePath();
+	const QString sanitizedPrefix = QFileInfo(home).absolutePath() + "/USER";
+	if (displayPath.startsWith(sanitizedPrefix, Qt::CaseInsensitive))
+		return home + displayPath.mid(sanitizedPrefix.length());
+	return displayPath;
+}
+
+class NoScrollEventFilter : public QObject {
+protected:
+	bool eventFilter(QObject *, QEvent *event) override
+	{
+		if (event->type() == QEvent::Wheel)
+			return true;
+		return false;
+	}
+};
 
 using namespace std;
 
@@ -354,6 +386,7 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 	HookWidget(ui->centerSnapping,       CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->sourceSnapping,       CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->snapDistance,         DSCROLL_CHANGED,GENERAL_CHANGED);
+	ui->snapDistance->installEventFilter(new NoScrollEventFilter());
 	HookWidget(ui->overflowHide,         CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->overflowAlwaysVisible,CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->overflowSelectionHide,CHECK_CHANGED,  GENERAL_CHANGED);
@@ -959,6 +992,13 @@ void OBSBasicSettings::SaveEdit(QLineEdit *widget, const char *section, const ch
 {
 	if (WidgetChanged(widget))
 		config_set_string(main->Config(), section, value, QT_TO_UTF8(widget->text()));
+}
+
+void OBSBasicSettings::SavePathEdit(QLineEdit *widget, const char *section, const char *value)
+{
+	if (WidgetChanged(widget))
+		config_set_string(main->Config(), section, value,
+				  QT_TO_UTF8(DesanitizePath(widget->text())));
 }
 
 void OBSBasicSettings::SaveSpinBox(QSpinBox *widget, const char *section, const char *value)
@@ -1744,7 +1784,7 @@ void OBSBasicSettings::LoadSimpleOutputSettings()
 	audioBitrate = isOpus ? FindClosestAvailableSimpleOpusBitrate(audioBitrate)
 			      : FindClosestAvailableSimpleAACBitrate(audioBitrate);
 
-	ui->simpleOutputPath->setText(path);
+	ui->simpleOutputPath->setText(SanitizePath(QT_UTF8(path)));
 	ui->simpleNoSpace->setChecked(noSpace);
 	ui->simpleOutputVBitrate->setValue(videoBitrate);
 
@@ -1956,7 +1996,7 @@ void OBSBasicSettings::LoadAdvOutputRecordingSettings()
 
 	int typeIndex = (astrcmpi(type, "FFmpeg") == 0) ? 1 : 0;
 	ui->advOutRecType->setCurrentIndex(typeIndex);
-	ui->advOutRecPath->setText(path);
+	ui->advOutRecPath->setText(SanitizePath(QT_UTF8(path)));
 	ui->advOutNoSpace->setChecked(noSpace);
 	ui->advOutRecRescale->setCurrentText(rescaleRes);
 	int idx = ui->advOutRecRescaleFilter->findData(rescaleFilter);
@@ -2090,7 +2130,7 @@ void OBSBasicSettings::LoadAdvOutputFFmpegSettings()
 	const char *aEncCustom = config_get_string(main->Config(), "AdvOut", "FFACustom");
 
 	ui->advOutFFType->setCurrentIndex(saveFile ? 0 : 1);
-	ui->advOutFFRecPath->setText(QT_UTF8(path));
+	ui->advOutFFRecPath->setText(SanitizePath(QT_UTF8(path)));
 	ui->advOutFFNoSpace->setChecked(noSpace);
 	ui->advOutFFURL->setText(QT_UTF8(url));
 	SelectFormat(ui->advOutFFFormat, format, mimeType);
@@ -3379,7 +3419,7 @@ void OBSBasicSettings::SaveOutputSettings()
 	SaveComboData(ui->simpleOutStrEncoder, "SimpleOutput", "StreamEncoder");
 	SaveComboData(ui->simpleOutStrAEncoder, "SimpleOutput", "StreamAudioEncoder");
 	SaveCombo(ui->simpleOutputABitrate, "SimpleOutput", "ABitrate");
-	SaveEdit(ui->simpleOutputPath, "SimpleOutput", "FilePath");
+	SavePathEdit(ui->simpleOutputPath, "SimpleOutput", "FilePath");
 	SaveCheckBox(ui->simpleNoSpace, "SimpleOutput", "FileNameWithoutSpace");
 	SaveComboData(ui->simpleOutRecFormat, "SimpleOutput", "RecFormat2");
 	SaveCheckBox(ui->simpleOutAdvanced, "SimpleOutput", "UseAdvanced");
@@ -3407,7 +3447,7 @@ void OBSBasicSettings::SaveOutputSettings()
 
 	curAdvRecordEncoder = GetComboData(ui->advOutRecEncoder);
 
-	SaveEdit(ui->advOutRecPath, "AdvOut", "RecFilePath");
+	SavePathEdit(ui->advOutRecPath, "AdvOut", "RecFilePath");
 	SaveCheckBox(ui->advOutNoSpace, "AdvOut", "RecFileNameWithoutSpace");
 	SaveComboData(ui->advOutRecFormat, "AdvOut", "RecFormat2");
 	SaveComboData(ui->advOutRecEncoder, "AdvOut", "RecEncoder");
@@ -3427,7 +3467,7 @@ void OBSBasicSettings::SaveOutputSettings()
 
 	config_set_bool(main->Config(), "AdvOut", "FFOutputToFile",
 			ui->advOutFFType->currentIndex() == 0 ? true : false);
-	SaveEdit(ui->advOutFFRecPath, "AdvOut", "FFFilePath");
+	SavePathEdit(ui->advOutFFRecPath, "AdvOut", "FFFilePath");
 	SaveCheckBox(ui->advOutFFNoSpace, "AdvOut", "FFFileNameWithoutSpace");
 	SaveEdit(ui->advOutFFURL, "AdvOut", "FFURL");
 	SaveFormat(ui->advOutFFFormat);
@@ -3860,30 +3900,32 @@ void OBSBasicSettings::on_buttonBox_clicked(QAbstractButton *button)
 
 void OBSBasicSettings::on_simpleOutputBrowse_clicked()
 {
-	QString dir =
-		SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"), ui->simpleOutputPath->text());
+	QString dir = SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"),
+				      DesanitizePath(ui->simpleOutputPath->text()));
 	if (dir.isEmpty())
 		return;
 
-	ui->simpleOutputPath->setText(dir);
+	ui->simpleOutputPath->setText(SanitizePath(dir));
 }
 
 void OBSBasicSettings::on_advOutRecPathBrowse_clicked()
 {
-	QString dir = SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"), ui->advOutRecPath->text());
+	QString dir = SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"),
+				      DesanitizePath(ui->advOutRecPath->text()));
 	if (dir.isEmpty())
 		return;
 
-	ui->advOutRecPath->setText(dir);
+	ui->advOutRecPath->setText(SanitizePath(dir));
 }
 
 void OBSBasicSettings::on_advOutFFPathBrowse_clicked()
 {
-	QString dir = SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"), ui->advOutRecPath->text());
+	QString dir = SelectDirectory(this, QTStr("Basic.Settings.Output.SelectDirectory"),
+				      DesanitizePath(ui->advOutFFRecPath->text()));
 	if (dir.isEmpty())
 		return;
 
-	ui->advOutFFRecPath->setText(dir);
+	ui->advOutFFRecPath->setText(SanitizePath(dir));
 }
 
 void OBSBasicSettings::on_advOutEncoder_currentIndexChanged()
