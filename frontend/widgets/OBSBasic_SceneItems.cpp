@@ -663,6 +663,28 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 				actionHideMixer->setCheckable(true);
 				actionHideMixer->setChecked(isHidden);
 			}
+
+			/* Output Visibility submenu */
+			{
+				QMenu *outputFilterMenu = new QMenu(QTStr("OutputFilter"), &popup);
+				auto curFilter = obs_source_get_output_filter(source);
+
+				auto makeAction = [&](const char *key, enum obs_source_output_filter val) {
+					QAction *a = outputFilterMenu->addAction(QTStr(key));
+					a->setCheckable(true);
+					a->setChecked(curFilter == val);
+					connect(a, &QAction::triggered, this, [source, val]() {
+						obs_source_set_output_filter(source, val);
+					});
+					return a;
+				};
+
+				makeAction("OutputFilter.All", OBS_SOURCE_OUTPUT_FILTER_ALL);
+				makeAction("OutputFilter.StreamOnly", OBS_SOURCE_OUTPUT_FILTER_STREAM);
+				makeAction("OutputFilter.RecordOnly", OBS_SOURCE_OUTPUT_FILTER_RECORD);
+				popup.addMenu(outputFilterMenu);
+			}
+
 			popup.addSeparator();
 		}
 

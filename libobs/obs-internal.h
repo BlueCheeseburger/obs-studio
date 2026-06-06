@@ -381,10 +381,15 @@ struct obs_core_video_mix {
 	long encoder_refs;
 
 	bool mix_audio;
+
+	/* render_output_filter: which output type this mix renders for.
+	 * 0 = all (default), 1 = stream only, 2 = record only */
+	uint32_t render_output_filter;
 };
 
 extern struct obs_core_video_mix *obs_create_video_mix(struct obs_video_info *ovi);
 extern void obs_free_video_mix(struct obs_core_video_mix *video);
+extern uint32_t obs_get_render_output_filter(void);
 
 struct obs_core_video {
 	graphics_t *graphics;
@@ -998,6 +1003,9 @@ struct obs_source {
 
 	/* private data */
 	obs_data_t *private_settings;
+
+	/* output filter: controls which output types render this source */
+	uint32_t output_filter;
 
 	/* canvas this source belongs to (only used for scenes) */
 	obs_weak_canvas_t *canvas;

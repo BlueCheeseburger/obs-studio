@@ -29,6 +29,15 @@
 #include <windows.h>
 #endif
 
+/* Thread-local render output filter: set before each video mix renders so that
+ * scene_video_render() can skip sources that don't belong to this output type. */
+static __thread uint32_t current_render_output_filter = 0;
+
+uint32_t obs_get_render_output_filter(void)
+{
+	return current_render_output_filter;
+}
+
 static uint64_t tick_sources(uint64_t cur_time, uint64_t last_time)
 {
 	struct obs_core_data *data = &obs->data;
@@ -147,6 +156,9 @@ static inline bool can_reuse_mix_texture(const struct obs_core_video_mix *mix, s
 			continue;
 		if (!other->texture_rendered)
 			continue;
+		/* Mixes with different output filters render different source subsets */
+		if (other->render_output_filter != mix->render_output_filter)
+			continue;
 
 		*idx = i;
 		return true;
@@ -196,10 +208,13 @@ static inline void render_main_texture(struct obs_core_video_mix *video)
 
 	/* In some cases we can reuse a previous mix's texture and save re-rendering everything */
 	size_t reuse_idx;
-	if (can_reuse_mix_texture(video, &reuse_idx))
+	if (can_reuse_mix_texture(video, &reuse_idx)) {
 		draw_mix_texture(reuse_idx);
-	else
+	} else {
+		current_render_output_filter = video->render_output_filter;
 		obs_view_render(video->view);
+		current_render_output_filter = 0;
+	}
 
 	video->texture_rendered = true;
 
