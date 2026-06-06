@@ -130,6 +130,7 @@ private:
 	void SaveCheckBox(QAbstractButton *widget, const char *section, const char *value, bool invert = false);
 	void SaveGroupBox(QGroupBox *widget, const char *section, const char *value);
 	void SaveEdit(QLineEdit *widget, const char *section, const char *value);
+	void SavePathEdit(QLineEdit *widget, const char *section, const char *value);
 	void SaveSpinBox(QSpinBox *widget, const char *section, const char *value);
 	void SaveText(QPlainTextEdit *widget, const char *section, const char *value);
 	void SaveFormat(QComboBox *combo);
