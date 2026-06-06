@@ -24,6 +24,7 @@
 #include <components/AccessibleAlignmentSelector.hpp>
 #include <oauth/Auth.hpp>
 #include <utility/BasicOutputHandler.hpp>
+#include <utility/MultiStreamOutput.hpp>
 #include <utility/OBSCanvas.hpp>
 #include <utility/PreviewProgramSizeObserver.hpp>
 #include <utility/VCamConfig.hpp>
@@ -680,6 +681,7 @@ private:
 	 */
 private:
 	std::unique_ptr<BasicOutputHandler> outputHandler;
+	std::unique_ptr<MultiStreamOutput> multiStreamOutput;
 	std::optional<std::pair<uint32_t, uint32_t>> lastOutputResolution;
 
 	int disableOutputsRef = 0;
