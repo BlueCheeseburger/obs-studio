@@ -205,7 +205,7 @@ OBSBasicSettings #PropertiesContainer {
 }
 
 OBSBasicSettings QListWidget::item {
-    padding: 4px;
+    padding: 2px;
 }
 
 QPushButton:checked {
