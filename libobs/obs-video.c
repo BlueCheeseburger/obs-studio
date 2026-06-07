@@ -31,7 +31,11 @@
 
 /* Thread-local render output filter: set before each video mix renders so that
  * scene_video_render() can skip sources that don't belong to this output type. */
+#ifdef _MSC_VER
+static __declspec(thread) uint32_t current_render_output_filter = 0;
+#else
 static __thread uint32_t current_render_output_filter = 0;
+#endif
 
 uint32_t obs_get_render_output_filter(void)
 {
