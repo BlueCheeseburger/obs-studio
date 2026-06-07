@@ -3,6 +3,11 @@
 
 #include <widgets/OBSBasic.hpp>
 
+#include <QDir>
+#include <QMessageBox>
+#include <QProcess>
+#include <QPushButton>
+
 #include "moc_OBSBasicStatusBar.cpp"
 
 static constexpr int bitrateUpdateSeconds = 2;
@@ -35,6 +40,53 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	statusWidget->ui->delayFrame->hide();
 	statusWidget->ui->issuesFrame->hide();
 	statusWidget->ui->kbps->hide();
+
+	QPushButton *updateButton = new QPushButton(tr("Check for Updates"), this);
+	updateButton->setFlat(true);
+	updateButton->setFixedHeight(20);
+	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
+		updateButton->setEnabled(false);
+		updateButton->setText(tr("Checking..."));
+
+		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
+
+		QString script = QString(
+			"Set-Location '%1';"
+			"git fetch;"
+			"$local  = git rev-parse HEAD;"
+			"$remote = git rev-parse '@{u}';"
+			"if ($local -ne $remote) {"
+			"  git pull;"
+			"  $env:CMAKE_TLS_VERIFY = '0';"
+			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
+			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
+			"}"
+		).arg(repoPath);
+
+		QProcess *proc = new QProcess(this);
+		connect(proc, &QProcess::finished, this,
+			[this, updateButton, proc](int exitCode, QProcess::ExitStatus) {
+				updateButton->setEnabled(true);
+				updateButton->setText(tr("Check for Updates"));
+				proc->deleteLater();
+
+				if (exitCode != 0)
+					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
+				else
+					showMessage(tr("Update check complete — restart OBS if rebuilt"), 5000);
+			});
+
+		proc->start("powershell.exe",
+			     {"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
+
+		if (!proc->waitForStarted(3000)) {
+			updateButton->setEnabled(true);
+			updateButton->setText(tr("Check for Updates"));
+			proc->deleteLater();
+			showMessage(tr("Could not launch PowerShell"), 5000);
+		}
+	});
+	addWidget(updateButton);
 
 	addPermanentWidget(statusWidget, 1);
 	setMinimumHeight(statusWidget->height());
