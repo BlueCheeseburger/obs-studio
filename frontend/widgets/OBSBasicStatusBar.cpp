@@ -6,7 +6,7 @@
 #include <QDir>
 #include <QMessageBox>
 #include <QProcess>
-#include <QPushButton>
+#include <QLabel>
 
 #include "moc_OBSBasicStatusBar.cpp"
 
@@ -41,18 +41,16 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	statusWidget->ui->issuesFrame->hide();
 	statusWidget->ui->kbps->hide();
 
-	QPushButton *updateButton = new QPushButton(tr("Check for Updates"), this);
-	updateButton->setFlat(true);
+	auto updateLinkHtml = [](const QString &text) {
+		return QString("<a href='#' style='color:#4fc3f7;text-decoration:underline;'>%1</a>").arg(text);
+	};
+	QLabel *updateButton = new QLabel(updateLinkHtml(tr("Check for Updates")), this);
 	updateButton->setFixedHeight(20);
 	updateButton->setCursor(Qt::PointingHandCursor);
-	updateButton->setStyleSheet(
-		"QPushButton { color: #4fc3f7; text-decoration: underline; "
-		"background: transparent; border: none; padding: 0 4px; }"
-		"QPushButton:hover { color: #81d4fa; }"
-		"QPushButton:disabled { color: #666; text-decoration: none; }");
-	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
-		updateButton->setEnabled(false);
-		updateButton->setText(tr("Checking..."));
+	updateButton->setTextFormat(Qt::RichText);
+	updateButton->setOpenExternalLinks(false);
+	connect(updateButton, &QLabel::linkActivated, this, [this, updateButton, updateLinkHtml]() {
+		updateButton->setText(tr("Checking…"));
 
 		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
 		QString obsExe = QDir::toNativeSeparators(
@@ -103,9 +101,8 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 		});
 
 		connect(proc, &QProcess::finished, this,
-			[this, updateButton, proc](int exitCode, QProcess::ExitStatus) {
-				updateButton->setEnabled(true);
-				updateButton->setText(tr("Check for Updates"));
+			[this, updateButton, updateLinkHtml, proc](int exitCode, QProcess::ExitStatus) {
+				updateButton->setText(updateLinkHtml(tr("Check for Updates")));
 				proc->deleteLater();
 				if (exitCode != 0)
 					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
@@ -115,8 +112,7 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			     {"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
 
 		if (!proc->waitForStarted(3000)) {
-			updateButton->setEnabled(true);
-			updateButton->setText(tr("Check for Updates"));
+			updateButton->setText(updateLinkHtml(tr("Check for Updates")));
 			proc->deleteLater();
 			showMessage(tr("Could not launch PowerShell"), 5000);
 		}
