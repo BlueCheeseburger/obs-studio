@@ -26,7 +26,7 @@ public:
 	static const char *const DEFAULT_SERVERS[MAX_DESTINATIONS];
 
 	explicit MultiStreamOutput(OBSBasic *main);
-	~MultiStreamOutput() = default;
+	~MultiStreamOutput();
 
 	void LoadConfig();
 	bool Start(obs_encoder_t *videoEncoder, obs_encoder_t *audioEncoder);
@@ -38,6 +38,5 @@ public:
 private:
 	OBSBasic *main;
 
-	bool StartDestination(MultiStreamDestination &dest, obs_encoder_t *videoEncoder,
-			      obs_encoder_t *audioEncoder);
+	bool StartDestination(MultiStreamDestination &dest, obs_encoder_t *videoEncoder, obs_encoder_t *audioEncoder);
 };

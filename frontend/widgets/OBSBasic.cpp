@@ -1435,6 +1435,9 @@ void OBSBasic::applicationShutdown() noexcept
 	ClearHotkeys();
 
 	service = nullptr;
+	/* Release secondary multi-stream outputs before the primary output
+	 * handler, since they share the handler's encoders. */
+	multiStreamOutput.reset();
 	outputHandler.reset();
 
 	delete interaction;

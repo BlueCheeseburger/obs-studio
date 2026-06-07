@@ -22,6 +22,14 @@ MultiStreamOutput::MultiStreamOutput(OBSBasic *main_) : main(main_)
 	}
 }
 
+MultiStreamOutput::~MultiStreamOutput()
+{
+	/* Force-stop and release any active secondary outputs while libobs is
+	 * still alive. This must happen before obs_shutdown(), which is why
+	 * OBSBasic explicitly resets this object during applicationShutdown(). */
+	Stop(true);
+}
+
 void MultiStreamOutput::LoadConfig()
 {
 	config_t *config = main->Config();
@@ -84,6 +92,11 @@ bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encod
 
 bool MultiStreamOutput::Start(obs_encoder_t *videoEncoder, obs_encoder_t *audioEncoder)
 {
+	/* Defensive: tear down any outputs left over from a previous session
+	 * (e.g. a reconnect that re-entered Start without an intervening Stop)
+	 * so we never orphan a running output by overwriting its handle. */
+	Stop(true);
+
 	LoadConfig();
 
 	bool anyStarted = false;
