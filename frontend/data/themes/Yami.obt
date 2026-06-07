@@ -2155,6 +2155,14 @@ OBSBasic {
     qproperty-audioProcessOutputIcon: url(theme:Dark/sources/windowaudio.svg);
 }
 
+/* Scene list - compact list items */
+
+#scenes::item {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    min-height: 0;
+}
+
 /* Scene Tree Grid Mode */
 
 SceneTree {

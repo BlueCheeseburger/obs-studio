@@ -3,9 +3,6 @@
 
 #include <widgets/OBSBasic.hpp>
 
-#include <QDir>
-#include <QMessageBox>
-#include <QProcess>
 #include <QLabel>
 
 #include "moc_OBSBasicStatusBar.cpp"
@@ -40,84 +37,6 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	statusWidget->ui->delayFrame->hide();
 	statusWidget->ui->issuesFrame->hide();
 	statusWidget->ui->kbps->hide();
-
-	auto updateLinkHtml = [](const QString &text) {
-		return QString("<a href='#' style='color:#4fc3f7;text-decoration:underline;'>%1</a>").arg(text);
-	};
-	QLabel *updateButton = new QLabel(updateLinkHtml(tr("Check for Updates")), this);
-	updateButton->setFixedHeight(20);
-	updateButton->setCursor(Qt::PointingHandCursor);
-	updateButton->setTextFormat(Qt::RichText);
-	updateButton->setOpenExternalLinks(false);
-	connect(updateButton, &QLabel::linkActivated, this, [this, updateButton, updateLinkHtml]() {
-		updateButton->setText(tr("Checking…"));
-
-		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
-		QString obsExe = QDir::toNativeSeparators(
-			QDir::homePath() +
-			"/obs-studio/build_x64/rundir/RelWithDebInfo/bin/64bit/obs64.exe");
-
-		// Fetch only master and claude/* branches, merge all new commits first,
-		// then rebuild once, kill OBS before build to release DLL locks, and
-		// relaunch after.  OBS kills itself so proc->finished never fires when
-		// a rebuild happens — that is expected; the new OBS instance is the signal.
-		QString script = QString(
-			"Set-Location '%1';"
-			"git fetch --all --prune;"
-			"$branches = git branch -r --format='%(refname:short)'"
-			" | Where-Object { $_ -eq 'origin/master' -or $_ -match '^origin/claude/' };"
-			"$hasUpdates = $false;"
-			"foreach ($branch in $branches) {"
-			"  $behind = [int](git rev-list HEAD..\"$branch\" --count 2>$null);"
-			"  if ($behind -gt 0) {"
-			"    git merge \"$branch\" --no-edit --no-ff 2>&1 | Out-Null;"
-			"    $hasUpdates = $true;"
-			"  }"
-			"}"
-			"if ($hasUpdates) {"
-			"  Write-Output 'REBUILDING';"
-			"  [Console]::Out.Flush();"
-			"  Stop-Process -Name obs64 -Force -ErrorAction SilentlyContinue;"
-			"  Start-Sleep -Milliseconds 800;"
-			"  $env:CMAKE_TLS_VERIFY = '0';"
-			"  $cmake = 'C:\\Program Files\\CMake\\bin\\cmake.exe';"
-			"  & $cmake --preset windows-x64-local;"
-			"  & $cmake --build --preset windows-x64-local;"
-			"  Start-Process '%2' -WorkingDirectory (Split-Path '%2');"
-			"} else {"
-			"  Write-Output 'NO_UPDATES';"
-			"}"
-		).arg(repoPath, obsExe);
-
-		QProcess *proc = new QProcess(this);
-		proc->setProcessChannelMode(QProcess::MergedChannels);
-
-		connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc]() {
-			QString out = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
-			if (out.contains("REBUILDING"))
-				showMessage(tr("Updates found — rebuilding, OBS will restart…"), 30000);
-			else if (out.contains("NO_UPDATES"))
-				showMessage(tr("Already up to date"), 5000);
-		});
-
-		connect(proc, &QProcess::finished, this,
-			[this, updateButton, updateLinkHtml, proc](int exitCode, QProcess::ExitStatus) {
-				updateButton->setText(updateLinkHtml(tr("Check for Updates")));
-				proc->deleteLater();
-				if (exitCode != 0)
-					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
-			});
-
-		proc->start("powershell.exe",
-			     {"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
-
-		if (!proc->waitForStarted(3000)) {
-			updateButton->setText(updateLinkHtml(tr("Check for Updates")));
-			proc->deleteLater();
-			showMessage(tr("Could not launch PowerShell"), 5000);
-		}
-	});
-	addWidget(updateButton);
 
 	addPermanentWidget(statusWidget, 1);
 	setMinimumHeight(statusWidget->height());
