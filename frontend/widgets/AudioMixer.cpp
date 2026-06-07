@@ -26,6 +26,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QCursor>
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QPointer>
@@ -175,6 +176,12 @@ AudioMixer::AudioMixer(QWidget *parent) : QFrame(parent)
 	createMixerContextMenu();
 	optionsButton->setMenu(mixerMenu);
 
+	addSourceAction = new QAction(this);
+	addSourceAction->setText("+");
+	addSourceAction->setToolTip(QTStr("Basic.AudioMixer.AddSource"));
+	addSourceAction->setObjectName("actionMixerToolbarAddSource");
+	connect(addSourceAction, &QAction::triggered, this, &AudioMixer::showAddSourceMenu);
+
 	toggleHiddenButton = new QPushButton(mixerToolbar);
 	toggleHiddenButton->setCheckable(true);
 	toggleHiddenButton->setChecked(showHidden);
@@ -186,6 +193,8 @@ AudioMixer::AudioMixer(QWidget *parent) : QFrame(parent)
 	idian::Utils::addClass(toggleHiddenButton, "toolbar-button");
 	idian::Utils::addClass(toggleHiddenButton, "toggle-hidden");
 
+	mixerToolbar->addAction(addSourceAction);
+	mixerToolbar->addSeparator();
 	mixerToolbar->addWidget(toggleHiddenButton);
 
 	mixerToolbar->addSeparator();
@@ -1125,4 +1134,67 @@ void AudioMixer::obsSceneItemVisibleChange(void *data, calldata_t *params)
 		QMetaObject::invokeMethod(static_cast<AudioMixer *>(data), "updateControlVisibility",
 					  Qt::QueuedConnection, Q_ARG(QString, QString::fromUtf8(uuidPointer)));
 	}
+}
+
+void AudioMixer::showAddSourceMenu()
+{
+	QMenu menu(this);
+	bool hasAny = false;
+
+	struct {
+		const char *id;
+		const char *localeKey;
+	} audioTypes[] = {
+		{"wasapi_process_output_capture", "Basic.AudioMixer.AddSource.AppAudio"},
+		{"wasapi_input_capture", "Basic.AudioMixer.AddSource.AudioInput"},
+		{"wasapi_output_capture", "Basic.AudioMixer.AddSource.AudioOutput"},
+	};
+
+	for (auto &type : audioTypes) {
+		if (!obs_source_get_display_name(type.id))
+			continue;
+		QAction *a = menu.addAction(QTStr(type.localeKey));
+		std::string id = type.id;
+		connect(a, &QAction::triggered, this, [this, id]() { addAudioSource(id); });
+		hasAny = true;
+	}
+
+	if (!hasAny) {
+		menu.addAction("No audio source types available")->setEnabled(false);
+	}
+
+	QWidget *w = mixerToolbar->widgetForAction(addSourceAction);
+	QPoint pos = w ? w->mapToGlobal(w->rect().bottomLeft()) : QCursor::pos();
+	menu.exec(pos);
+}
+
+void AudioMixer::addAudioSource(std::string sourceId)
+{
+	OBSBasic *main = OBSBasic::Get();
+	if (!main)
+		return;
+
+	// Generate a unique name
+	const char *displayName = obs_source_get_display_name(sourceId.c_str());
+	std::string baseName = displayName ? displayName : sourceId;
+	std::string name = baseName;
+	for (int suffix = 2;;) {
+		OBSSourceAutoRelease existing = obs_get_source_by_name(name.c_str());
+		if (!existing)
+			break;
+		name = baseName + " " + std::to_string(suffix++);
+	}
+
+	// Create the source
+	OBSSourceAutoRelease source = obs_source_create(sourceId.c_str(), name.c_str(), nullptr, nullptr);
+	if (!source)
+		return;
+
+	// Add to the current scene
+	OBSScene scene = main->GetCurrentScene();
+	if (scene)
+		obs_scene_add(scene, source);
+
+	// Open the properties dialog so the user can configure it
+	main->CreatePropertiesWindow(source);
 }

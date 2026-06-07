@@ -14,6 +14,7 @@ class MuteCheckBox;
 class QBoxLayout;
 class QLabel;
 class VolumeMeter;
+class QMenu;
 
 class VolumeControl : public QFrame {
 	Q_OBJECT
@@ -80,6 +81,7 @@ private:
 	VolumeSlider *slider;
 	QPushButton *muteButton;
 	QPushButton *monitorButton;
+	QLabel *audioFilterLabel{nullptr};
 
 	OBSFader obs_fader;
 
@@ -120,6 +122,7 @@ public slots:
 private slots:
 	void renameSource();
 	void changeVolume();
+	void updateAudioOutputFilter();
 
 	void handleMuteButton(bool checked);
 	void handleMonitorButton(bool checked);

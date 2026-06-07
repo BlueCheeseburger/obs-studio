@@ -19,6 +19,8 @@
 
 #include "OBSBasic.hpp"
 
+#include <string>
+
 #include <components/MenuCheckBox.hpp>
 #include <components/VolumeControl.hpp>
 
@@ -84,6 +86,7 @@ private:
 	QToolBar *mixerToolbar{nullptr};
 	QAction *layoutButton{nullptr};
 	QAction *advAudio{nullptr};
+	QAction *addSourceAction{nullptr};
 	QPushButton *optionsButton{nullptr};
 	QPushButton *toggleHiddenButton{nullptr};
 
@@ -128,6 +131,8 @@ private:
 
 private slots:
 	void addSource(QString uuid);
+	void showAddSourceMenu();
+	void addAudioSource(std::string sourceId);
 	void removeSource(QString uuid);
 	void updatePreviewSources();
 	void updateGlobalSources();
