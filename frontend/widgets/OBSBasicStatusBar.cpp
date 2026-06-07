@@ -6,8 +6,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QMessageBox>
+#include <QLabel>
 #include <QProcess>
-#include <QPushButton>
 
 #include "moc_OBSBasicStatusBar.cpp"
 
@@ -42,11 +42,11 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	statusWidget->ui->issuesFrame->hide();
 	statusWidget->ui->kbps->hide();
 
-	QPushButton *updateButton = new QPushButton(tr("Check for Updates"), this);
-	updateButton->setFlat(true);
-	updateButton->setFixedHeight(18);
-	updateButton->setStyleSheet("QPushButton { padding: 0px 6px; margin: 0px; }");
-	connect(updateButton, &QPushButton::clicked, this, [this]() {
+	QLabel *updateLink = new QLabel(tr("<a href='update'>Check for Updates</a>"), this);
+	updateLink->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+	updateLink->setOpenExternalLinks(false);
+	updateLink->setContentsMargins(4, 0, 4, 0);
+	connect(updateLink, &QLabel::linkActivated, this, [this]() {
 		auto answer = QMessageBox::question(
 			this, tr("Check for Updates"),
 			tr("OBS will close and reopen automatically — this takes a few minutes. Continue?"),
@@ -54,28 +54,30 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 		if (answer != QMessageBox::Ok)
 			return;
 
-		/* Repo path: sibling of the executable's directory up to the build
-		 * root, then resolve ~/obs-studio as the source checkout. */
 		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
-		/* Relaunch directory: wherever obs64.exe actually lives right now. */
 		QString obsDir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
 
 		QString script = QString(
 			"Set-Location '%1';"
-			"git fetch;"
-			"$local  = git rev-parse HEAD;"
-			"$remote = git rev-parse '@{u}';"
-			"if ($local -ne $remote) {"
-			"  Write-Host 'Remote changes found, pulling...';"
-			"  git pull;"
-			"}"
+			"git fetch --all;"
+			"$claudeBranches = git branch -r --sort=committerdate | "
+			"  Where-Object { $_ -match 'origin/claude/' } | "
+			"  ForEach-Object { $_.Trim() -replace '^origin/', '' };"
+			"if (-not $claudeBranches) { exit 0 };"
+			"$combinedBranch = 'claude/combined';"
+			"$exists = git branch --list $combinedBranch;"
+			"if ($exists) { git checkout $combinedBranch; git reset --hard origin/master }"
+			"else { git checkout -b $combinedBranch origin/master };"
+			"foreach ($branch in $claudeBranches) {"
+			"  git merge \"origin/$branch\" --no-edit --strategy-option=theirs 2>&1;"
+			"  if ($LASTEXITCODE -ne 0) { git merge --abort 2>&1 };"
+			"};"
 			"$obsProcess = Get-Process 'obs64' -ErrorAction SilentlyContinue;"
 			"if ($obsProcess) {"
-			"  Write-Host 'Closing OBS...';"
 			"  $obsProcess | Stop-Process -Force;"
 			"  $obsProcess | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue;"
 			"  Start-Sleep -Seconds 2;"
-			"}"
+			"};"
 			"$env:CMAKE_TLS_VERIFY = '0';"
 			"cmake --preset windows-x64-local;"
 			"cmake --build --preset windows-x64-local;"
@@ -86,7 +88,7 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 		QProcess::startDetached("powershell.exe",
 					{"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
 	});
-	addWidget(updateButton);
+	addWidget(updateLink);
 
 	addPermanentWidget(statusWidget, 1);
 	setMinimumHeight(statusWidget->height());
