@@ -7,6 +7,8 @@
 #include <dialogs/NameDialog.hpp>
 #include <widgets/OBSBasic.hpp>
 
+#include <QLabel>
+#include <QMenu>
 #include <QMessageBox>
 #include <QObjectCleanupHandler>
 
@@ -95,6 +97,12 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 
 	volumeMeter = new VolumeMeter(this, source);
 
+	audioFilterLabel = new QLabel(this);
+	audioFilterLabel->setObjectName("audioFilterLabel");
+	audioFilterLabel->setAlignment(Qt::AlignCenter);
+	audioFilterLabel->setFixedSize(14, 14);
+	audioFilterLabel->hide();
+
 	bool muted = obs_source_muted(source);
 	bool unassigned = isSourceUnassigned(source);
 
@@ -152,6 +160,7 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 	changeVolume();
 
 	updateMixerState();
+	updateAudioOutputFilter();
 }
 
 VolumeControl::~VolumeControl()
@@ -162,6 +171,34 @@ VolumeControl::~VolumeControl()
 
 	if (contextMenu) {
 		contextMenu->close();
+	}
+}
+
+void VolumeControl::updateAudioOutputFilter()
+{
+	if (!audioFilterLabel)
+		return;
+	OBSSource source = OBSGetStrongRef(weakSource());
+	if (!source)
+		return;
+
+	OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+	int filter = (int)obs_data_get_int(priv, "audio_output_filter");
+
+	switch (filter) {
+	case 1:
+		audioFilterLabel->setText("S");
+		audioFilterLabel->setToolTip(QTStr("Basic.AudioMixer.AudioOutputFilter.Stream"));
+		audioFilterLabel->setVisible(true);
+		break;
+	case 2:
+		audioFilterLabel->setText("R");
+		audioFilterLabel->setToolTip(QTStr("Basic.AudioMixer.AudioOutputFilter.Record"));
+		audioFilterLabel->setVisible(true);
+		break;
+	default:
+		audioFilterLabel->setVisible(false);
+		break;
 	}
 }
 
@@ -282,6 +319,7 @@ void VolumeControl::setLayoutVertical(bool vertical)
 		// Add Headphone (audio monitoring) widget here
 		controlLayout->addWidget(muteButton);
 		controlLayout->addWidget(monitorButton);
+		controlLayout->addWidget(audioFilterLabel);
 
 		meterLayout->setContentsMargins(0, 0, 0, 0);
 		meterLayout->setSpacing(0);
@@ -357,6 +395,7 @@ void VolumeControl::setLayoutVertical(bool vertical)
 
 		buttonLayout->addWidget(muteButton);
 		buttonLayout->addWidget(monitorButton);
+		buttonLayout->addWidget(audioFilterLabel);
 
 		controlLayout->addItem(buttonLayout);
 		controlLayout->addWidget(meterFrame);
@@ -471,6 +510,45 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 	popup->addAction(pasteFiltersAction);
 	popup->addSeparator();
 	popup->addAction(mixerRenameAction);
+	popup->addSeparator();
+
+	// Output Destination submenu (stream-only / record-only / all)
+	{
+		OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+		int curFilter = (int)obs_data_get_int(priv, "audio_output_filter");
+		OBSWeakSource weakSrc = OBSGetWeakRef(source);
+
+		QMenu *audioFilterMenu = new QMenu(QTStr("Basic.AudioMixer.AudioOutputFilter"), popup);
+		auto addOpt = [&](const char *key, int val) {
+			QAction *a = audioFilterMenu->addAction(QTStr(key));
+			a->setCheckable(true);
+			a->setChecked(curFilter == val);
+			connect(a, &QAction::triggered, this, [this, weakSrc, val]() {
+				OBSSource src = OBSGetStrongRef(weakSrc);
+				if (!src)
+					return;
+				OBSDataAutoRelease p = obs_source_get_private_settings(src);
+				obs_data_set_int(p, "audio_output_filter", (long long)val);
+				switch (val) {
+				case 1:
+					obs_source_set_audio_mixers(src, 0x01);
+					break;
+				case 2:
+					obs_source_set_audio_mixers(src, 0xFE);
+					break;
+				default:
+					obs_source_set_audio_mixers(src, 0xFF);
+					break;
+				}
+				updateAudioOutputFilter();
+			});
+		};
+		addOpt("Basic.AudioMixer.AudioOutputFilter.All", 0);
+		addOpt("Basic.AudioMixer.AudioOutputFilter.Stream", 1);
+		addOpt("Basic.AudioMixer.AudioOutputFilter.Record", 2);
+		popup->addMenu(audioFilterMenu);
+	}
+
 	popup->addSeparator();
 	popup->addAction(filtersAction);
 	popup->addAction(propertiesAction);
