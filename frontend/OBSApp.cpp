@@ -1403,8 +1403,14 @@ QStyle *OBSApp::GetInvisibleCursorStyle()
 // caring where they are coming from (e.g. plugins).
 bool OBSApp::notify(QObject *receiver, QEvent *e)
 {
-	if (e->type() == QEvent::Wheel && qobject_cast<QAbstractSpinBox *>(receiver)) {
-		return true; /* swallow — scroll must not change spinbox values */
+	if (e->type() == QEvent::Wheel) {
+		/* Walk up the parent chain: Qt propagates wheel events to parents
+		 * internally without re-entering notify(), so checking only the
+		 * initial receiver misses the QLineEdit child inside a spinbox. */
+		for (QObject *obj = receiver; obj; obj = obj->parent()) {
+			if (qobject_cast<QAbstractSpinBox *>(obj))
+				return true;
+		}
 	}
 
 	QWidget *w;

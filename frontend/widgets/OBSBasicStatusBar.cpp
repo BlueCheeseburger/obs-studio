@@ -43,12 +43,15 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 
 	QPushButton *updateButton = new QPushButton(tr("Check for Updates"), this);
 	updateButton->setFlat(true);
-	updateButton->setFixedHeight(20);
+	updateButton->setFixedHeight(18);
+	updateButton->setStyleSheet("QPushButton { padding: 0px 6px; margin: 0px; }");
 	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
 		updateButton->setEnabled(false);
 		updateButton->setText(tr("Checking..."));
 
-		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
+		QString home = QDir::toNativeSeparators(QDir::homePath());
+		QString repoPath = home + "\\obs-studio";
+		QString runDir = repoPath + "\\build_x64\\rundir\\RelWithDebInfo\\bin\\64bit";
 
 		QString script = QString(
 			"Set-Location '%1';"
@@ -56,12 +59,22 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			"$local  = git rev-parse HEAD;"
 			"$remote = git rev-parse '@{u}';"
 			"if ($local -ne $remote) {"
+			"  Write-Host 'Remote changes found, pulling...';"
 			"  git pull;"
-			"  $env:CMAKE_TLS_VERIFY = '0';"
-			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
-			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
 			"}"
-		).arg(repoPath);
+			"$obsProcess = Get-Process 'obs64' -ErrorAction SilentlyContinue;"
+			"if ($obsProcess) {"
+			"  Write-Host 'Closing OBS...';"
+			"  $obsProcess | Stop-Process -Force;"
+			"  $obsProcess | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue;"
+			"  Start-Sleep -Seconds 2;"
+			"}"
+			"$env:CMAKE_TLS_VERIFY = '0';"
+			"& 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
+			"& 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
+			"Set-Location '%2';"
+			"Start-Process 'obs64.exe';"
+		).arg(repoPath, runDir);
 
 		QProcess *proc = new QProcess(this);
 		connect(proc, &QProcess::finished, this,
@@ -72,8 +85,6 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 
 				if (exitCode != 0)
 					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
-				else
-					showMessage(tr("Update check complete — restart OBS if rebuilt"), 5000);
 			});
 
 		proc->start("powershell.exe",
