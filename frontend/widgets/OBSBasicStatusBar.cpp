@@ -58,26 +58,46 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 		QString obsDir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
 
 		QString script = QString(
+			// navigate to repo and fetch
 			"Set-Location '%1';"
 			"git fetch --all;"
+			// collect all remote claude/* branches, oldest first
 			"$claudeBranches = git branch -r --sort=committerdate | "
 			"  Where-Object { $_ -match 'origin/claude/' } | "
 			"  ForEach-Object { $_.Trim() -replace '^origin/', '' };"
 			"if (-not $claudeBranches) { exit 0 };"
+			// create/reset claude/combined on top of master
 			"$combinedBranch = 'claude/combined';"
 			"$exists = git branch --list $combinedBranch;"
 			"if ($exists) { git checkout $combinedBranch; git reset --hard origin/master }"
 			"else { git checkout -b $combinedBranch origin/master };"
+			// merge each branch; skip on conflict
 			"foreach ($branch in $claudeBranches) {"
 			"  git merge \"origin/$branch\" --no-edit --strategy-option=theirs 2>&1;"
 			"  if ($LASTEXITCODE -ne 0) { git merge --abort 2>&1 };"
 			"};"
+			// VS 2026 build fix: add cxx_std_20 to libobs-winrt if missing
+			"$winrtCmake = '%1\\libobs-winrt\\CMakeLists.txt';"
+			"$content = Get-Content $winrtCmake -Raw;"
+			"if ($content -notmatch 'cxx_std_20') {"
+			"  $content = $content -replace \"(target_link_libraries\\(libobs-winrt)\", \"target_compile_features(libobs-winrt PRIVATE cxx_std_20)`n`$1\";"
+			"  Set-Content $winrtCmake $content;"
+			"};"
+			// VS 2026 build fix: tighten version regex in versionconfig
+			"$versionCmake = '%1\\cmake\\common\\versionconfig.cmake';"
+			"$content = Get-Content $versionCmake -Raw;"
+			"if ($content -notmatch 'AND _obs_version MATCHES') {"
+			"  $content = $content -replace \"if\\(_obs_version_result EQUAL 0\\)\", 'if(_obs_version_result EQUAL 0 AND _obs_version MATCHES \"([0-9]+)\\\\.[0-9]+\\\\.[0-9]+.*\")';"
+			"  Set-Content $versionCmake $content;"
+			"};"
+			// close OBS so DLLs are not locked during copy
 			"$obsProcess = Get-Process 'obs64' -ErrorAction SilentlyContinue;"
 			"if ($obsProcess) {"
 			"  $obsProcess | Stop-Process -Force;"
 			"  $obsProcess | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue;"
 			"  Start-Sleep -Seconds 2;"
 			"};"
+			// rebuild and relaunch
 			"$env:CMAKE_TLS_VERIFY = '0';"
 			"cmake --preset windows-x64-local;"
 			"cmake --build --preset windows-x64-local;"
