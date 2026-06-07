@@ -50,16 +50,30 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 
 		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
 
+		// Fetch all remote branches, then merge any of them that have new
+		// commits not yet in HEAD (master first, then the current tracking
+		// branch if it differs).  This way updates land regardless of which
+		// local branch is checked out.
 		QString script = QString(
 			"Set-Location '%1';"
-			"git fetch;"
-			"$local  = git rev-parse HEAD;"
-			"$remote = git rev-parse '@{u}';"
-			"if ($local -ne $remote) {"
-			"  git pull;"
-			"  $env:CMAKE_TLS_VERIFY = '0';"
-			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
-			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
+			"git fetch --all --prune;"
+			"$rebuilt = $false;"
+			"$cmake = 'C:\\Program Files\\CMake\\bin\\cmake.exe';"
+			"function Rebuild {"
+			"  if (-not $script:rebuilt) {"
+			"    $script:rebuilt = $true;"
+			"    & $cmake --preset windows-x64-local;"
+			"    & $cmake --build --preset windows-x64-local;"
+			"  }"
+			"}"
+			"$head = git rev-parse HEAD;"
+			"$branches = git branch -r --format='%(refname:short)' | Where-Object { $_ -notmatch '->' };"
+			"foreach ($branch in $branches) {"
+			"  $behind = git rev-list HEAD..\"$branch\" --count 2>$null;"
+			"  if ([int]$behind -gt 0) {"
+			"    git merge \"$branch\" --no-edit --no-ff 2>&1 | Out-Null;"
+			"    Rebuild;"
+			"  }"
 			"}"
 		).arg(repoPath);
 
