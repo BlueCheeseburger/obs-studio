@@ -3,6 +3,7 @@
 
 #include <widgets/OBSBasic.hpp>
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QMessageBox>
 #include <QProcess>
@@ -45,13 +46,19 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	updateButton->setFlat(true);
 	updateButton->setFixedHeight(18);
 	updateButton->setStyleSheet("QPushButton { padding: 0px 6px; margin: 0px; }");
-	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
-		updateButton->setEnabled(false);
-		updateButton->setText(tr("Checking..."));
+	connect(updateButton, &QPushButton::clicked, this, [this]() {
+		auto answer = QMessageBox::question(
+			this, tr("Check for Updates"),
+			tr("OBS will close and reopen automatically — this takes a few minutes. Continue?"),
+			QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Ok);
+		if (answer != QMessageBox::Ok)
+			return;
 
-		QString home = QDir::toNativeSeparators(QDir::homePath());
-		QString repoPath = home + "\\obs-studio";
-		QString runDir = repoPath + "\\build_x64\\rundir\\RelWithDebInfo\\bin\\64bit";
+		/* Repo path: sibling of the executable's directory up to the build
+		 * root, then resolve ~/obs-studio as the source checkout. */
+		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
+		/* Relaunch directory: wherever obs64.exe actually lives right now. */
+		QString obsDir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
 
 		QString script = QString(
 			"Set-Location '%1';"
@@ -70,32 +77,14 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			"  Start-Sleep -Seconds 2;"
 			"}"
 			"$env:CMAKE_TLS_VERIFY = '0';"
-			"& 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
-			"& 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
+			"cmake --preset windows-x64-local;"
+			"cmake --build --preset windows-x64-local;"
 			"Set-Location '%2';"
 			"Start-Process 'obs64.exe';"
-		).arg(repoPath, runDir);
+		).arg(repoPath, obsDir);
 
-		QProcess *proc = new QProcess(this);
-		connect(proc, &QProcess::finished, this,
-			[this, updateButton, proc](int exitCode, QProcess::ExitStatus) {
-				updateButton->setEnabled(true);
-				updateButton->setText(tr("Check for Updates"));
-				proc->deleteLater();
-
-				if (exitCode != 0)
-					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
-			});
-
-		proc->start("powershell.exe",
-			     {"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
-
-		if (!proc->waitForStarted(3000)) {
-			updateButton->setEnabled(true);
-			updateButton->setText(tr("Check for Updates"));
-			proc->deleteLater();
-			showMessage(tr("Could not launch PowerShell"), 5000);
-		}
+		QProcess::startDetached("powershell.exe",
+					{"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
 	});
 	addWidget(updateButton);
 
