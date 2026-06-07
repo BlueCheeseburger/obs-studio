@@ -49,33 +49,37 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 		updateButton->setText(tr("Checking..."));
 
 		QString repoPath = QDir::toNativeSeparators(QDir::homePath() + "/obs-studio");
+		QString obsExe = QDir::toNativeSeparators(
+			QDir::homePath() +
+			"/obs-studio/build_x64/rundir/RelWithDebInfo/bin/64bit/obs64.exe");
 
-		// Fetch all remote branches, then merge any of them that have new
-		// commits not yet in HEAD (master first, then the current tracking
-		// branch if it differs).  This way updates land regardless of which
-		// local branch is checked out.
+		// Fetch only master and claude/* branches, merge all new commits first,
+		// then rebuild once, kill OBS before build to release DLL locks, and
+		// relaunch after.  OBS kills itself so proc->finished never fires when
+		// a rebuild happens — that is expected; the new OBS instance is the signal.
 		QString script = QString(
 			"Set-Location '%1';"
 			"git fetch --all --prune;"
-			"$rebuilt = $false;"
-			"$cmake = 'C:\\Program Files\\CMake\\bin\\cmake.exe';"
-			"function Rebuild {"
-			"  if (-not $script:rebuilt) {"
-			"    $script:rebuilt = $true;"
-			"    & $cmake --preset windows-x64-local;"
-			"    & $cmake --build --preset windows-x64-local;"
-			"  }"
-			"}"
-			"$head = git rev-parse HEAD;"
-			"$branches = git branch -r --format='%(refname:short)' | Where-Object { $_ -notmatch '->' };"
+			"$branches = git branch -r --format='%(refname:short)'"
+			" | Where-Object { $_ -eq 'origin/master' -or $_ -match '^origin/claude/' };"
+			"$hasUpdates = $false;"
 			"foreach ($branch in $branches) {"
-			"  $behind = git rev-list HEAD..\"$branch\" --count 2>$null;"
-			"  if ([int]$behind -gt 0) {"
+			"  $behind = [int](git rev-list HEAD..\"$branch\" --count 2>$null);"
+			"  if ($behind -gt 0) {"
 			"    git merge \"$branch\" --no-edit --no-ff 2>&1 | Out-Null;"
-			"    Rebuild;"
+			"    $hasUpdates = $true;"
 			"  }"
 			"}"
-		).arg(repoPath);
+			"if ($hasUpdates) {"
+			"  Stop-Process -Name obs64 -Force -ErrorAction SilentlyContinue;"
+			"  Start-Sleep -Milliseconds 800;"
+			"  $env:CMAKE_TLS_VERIFY = '0';"
+			"  $cmake = 'C:\\Program Files\\CMake\\bin\\cmake.exe';"
+			"  & $cmake --preset windows-x64-local;"
+			"  & $cmake --build --preset windows-x64-local;"
+			"  Start-Process '%2' -WorkingDirectory (Split-Path '%2');"
+			"}"
+		).arg(repoPath, obsExe);
 
 		QProcess *proc = new QProcess(this);
 		connect(proc, &QProcess::finished, this,
@@ -87,7 +91,7 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 				if (exitCode != 0)
 					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
 				else
-					showMessage(tr("Update check complete — restart OBS if rebuilt"), 5000);
+					showMessage(tr("Already up to date"), 5000);
 			});
 
 		proc->start("powershell.exe",
