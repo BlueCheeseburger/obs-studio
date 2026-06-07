@@ -169,6 +169,7 @@ OBSBasicSettings {
 OBSBasicSettings QListWidget::item {
     padding-top: 2px;
     padding-bottom: 2px;
+    min-height: 0px;
 }
 
 .checkbox-icon {

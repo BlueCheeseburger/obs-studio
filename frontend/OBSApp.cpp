@@ -37,6 +37,7 @@
 #include <qt-wrappers.hpp>
 
 #include <QCheckBox>
+#include <QAbstractSpinBox>
 #include <QDesktopServices>
 #if defined(_WIN32) || defined(ENABLE_SPARKLE_UPDATER)
 #include <QFile>
@@ -1448,6 +1449,11 @@ QStyle *OBSApp::GetInvisibleCursorStyle()
 // caring where they are coming from (e.g. plugins).
 bool OBSApp::notify(QObject *receiver, QEvent *e)
 {
+	if (e->type() == QEvent::Wheel && qobject_cast<QAbstractSpinBox *>(receiver)) {
+		e->ignore();
+		return false;
+	}
+
 	QWidget *w;
 	QWindow *window;
 	int windowType;
