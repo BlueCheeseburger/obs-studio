@@ -57,6 +57,7 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			"$remote = git rev-parse '@{u}';"
 			"if ($local -ne $remote) {"
 			"  git pull;"
+			"  $env:CMAKE_TLS_VERIFY = '0';"
 			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --preset windows-x64-local;"
 			"  & 'C:\\Program Files\\CMake\\bin\\cmake.exe' --build --preset windows-x64-local;"
 			"}"
@@ -75,7 +76,8 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 					showMessage(tr("Update check complete — restart OBS if rebuilt"), 5000);
 			});
 
-		proc->start("powershell.exe", {"-NonInteractive", "-Command", script});
+		proc->start("powershell.exe",
+			     {"-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script});
 
 		if (!proc->waitForStarted(3000)) {
 			updateButton->setEnabled(true);

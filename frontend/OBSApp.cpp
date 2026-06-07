@@ -1404,8 +1404,7 @@ QStyle *OBSApp::GetInvisibleCursorStyle()
 bool OBSApp::notify(QObject *receiver, QEvent *e)
 {
 	if (e->type() == QEvent::Wheel && qobject_cast<QAbstractSpinBox *>(receiver)) {
-		e->ignore();
-		return false;
+		return true; /* swallow — scroll must not change spinbox values */
 	}
 
 	QWidget *w;
