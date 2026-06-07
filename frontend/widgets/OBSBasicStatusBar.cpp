@@ -46,10 +46,10 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	updateButton->setFixedHeight(20);
 	updateButton->setCursor(Qt::PointingHandCursor);
 	updateButton->setStyleSheet(
-		"QPushButton { color: palette(link); text-decoration: underline; "
+		"QPushButton { color: #4fc3f7; text-decoration: underline; "
 		"background: transparent; border: none; padding: 0 4px; }"
-		"QPushButton:hover { color: palette(highlight); }"
-		"QPushButton:disabled { color: palette(mid); text-decoration: none; }");
+		"QPushButton:hover { color: #81d4fa; }"
+		"QPushButton:disabled { color: #666; text-decoration: none; }");
 	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
 		updateButton->setEnabled(false);
 		updateButton->setText(tr("Checking..."));
