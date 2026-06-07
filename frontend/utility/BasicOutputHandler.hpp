@@ -43,8 +43,10 @@ struct BasicOutputHandler {
 	obs_scene_t *vCamSourceScene = nullptr;
 	obs_sceneitem_t *vCamSourceSceneItem = nullptr;
 
-	/* Separate video mixes for stream/record output filtering.
-	 * Non-null only when at least one source has an output_filter set. */
+	/* Separate video mixes for stream/record output filtering. Created with
+	 * the handler; they reuse the main mix's rendered texture (no extra GPU
+	 * cost) until a source actually sets an output_filter, at which point
+	 * they render their own filtered view. */
 	video_t *streamVideo = nullptr;
 	video_t *recordVideo = nullptr;
 

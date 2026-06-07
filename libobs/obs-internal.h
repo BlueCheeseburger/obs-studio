@@ -438,6 +438,12 @@ struct obs_core_video {
 
 	pthread_mutex_t mixes_mutex;
 	DARRAY(struct obs_core_video_mix *) mixes;
+
+	/* Number of sources that currently have a non-zero output_filter set.
+	 * When zero, the stream/record output-filtered mixes render identical
+	 * content to the main mix and may reuse its texture instead of doing a
+	 * full second/third scene render each frame. */
+	volatile long output_filtered_count;
 };
 
 extern void add_ready_encoder_group(obs_encoder_t *encoder);

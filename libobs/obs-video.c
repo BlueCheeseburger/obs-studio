@@ -160,8 +160,12 @@ static inline bool can_reuse_mix_texture(const struct obs_core_video_mix *mix, s
 			continue;
 		if (!other->texture_rendered)
 			continue;
-		/* Mixes with different output filters render different source subsets */
-		if (other->render_output_filter != mix->render_output_filter)
+		/* Mixes with different output filters render different source
+		 * subsets — but only when at least one source is actually
+		 * filtered. With no filtered sources every mix produces the same
+		 * image, so reuse is safe and avoids redundant scene renders. */
+		if (os_atomic_load_long(&obs->video.output_filtered_count) > 0 &&
+		    other->render_output_filter != mix->render_output_filter)
 			continue;
 
 		*idx = i;
