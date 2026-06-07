@@ -44,6 +44,12 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	QPushButton *updateButton = new QPushButton(tr("Check for Updates"), this);
 	updateButton->setFlat(true);
 	updateButton->setFixedHeight(20);
+	updateButton->setCursor(Qt::PointingHandCursor);
+	updateButton->setStyleSheet(
+		"QPushButton { color: palette(link); text-decoration: underline; "
+		"background: transparent; border: none; padding: 0 4px; }"
+		"QPushButton:hover { color: palette(highlight); }"
+		"QPushButton:disabled { color: palette(mid); text-decoration: none; }");
 	connect(updateButton, &QPushButton::clicked, this, [this, updateButton]() {
 		updateButton->setEnabled(false);
 		updateButton->setText(tr("Checking..."));
@@ -71,6 +77,8 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			"  }"
 			"}"
 			"if ($hasUpdates) {"
+			"  Write-Output 'REBUILDING';"
+			"  [Console]::Out.Flush();"
 			"  Stop-Process -Name obs64 -Force -ErrorAction SilentlyContinue;"
 			"  Start-Sleep -Milliseconds 800;"
 			"  $env:CMAKE_TLS_VERIFY = '0';"
@@ -78,20 +86,29 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 			"  & $cmake --preset windows-x64-local;"
 			"  & $cmake --build --preset windows-x64-local;"
 			"  Start-Process '%2' -WorkingDirectory (Split-Path '%2');"
+			"} else {"
+			"  Write-Output 'NO_UPDATES';"
 			"}"
 		).arg(repoPath, obsExe);
 
 		QProcess *proc = new QProcess(this);
+		proc->setProcessChannelMode(QProcess::MergedChannels);
+
+		connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc]() {
+			QString out = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+			if (out.contains("REBUILDING"))
+				showMessage(tr("Updates found — rebuilding, OBS will restart…"), 30000);
+			else if (out.contains("NO_UPDATES"))
+				showMessage(tr("Already up to date"), 5000);
+		});
+
 		connect(proc, &QProcess::finished, this,
 			[this, updateButton, proc](int exitCode, QProcess::ExitStatus) {
 				updateButton->setEnabled(true);
 				updateButton->setText(tr("Check for Updates"));
 				proc->deleteLater();
-
 				if (exitCode != 0)
 					showMessage(tr("Update check failed (exit %1)").arg(exitCode), 5000);
-				else
-					showMessage(tr("Already up to date"), 5000);
 			});
 
 		proc->start("powershell.exe",
