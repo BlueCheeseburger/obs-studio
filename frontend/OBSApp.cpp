@@ -89,56 +89,10 @@ typedef struct UncleanLaunchAction {
 	bool sendCrashReport = false;
 } UncleanLaunchAction;
 
-UncleanLaunchAction handleUncleanShutdown(bool enableCrashUpload)
+UncleanLaunchAction handleUncleanShutdown(bool)
 {
-	UncleanLaunchAction launchAction;
-
-	blog(LOG_WARNING, "Crash or unclean shutdown detected");
-
-	QMessageBox crashWarning;
-
-	crashWarning.setIcon(QMessageBox::Warning);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
-	crashWarning.setOption(QMessageBox::Option::DontUseNativeDialog);
-#endif
-	crashWarning.setWindowTitle(QTStr("CrashHandling.Dialog.Title"));
-	crashWarning.setText(QTStr("CrashHandling.Labels.Text"));
-
-	if (enableCrashUpload) {
-		crashWarning.setInformativeText(QTStr("CrashHandling.Labels.PrivacyNotice"));
-
-		QCheckBox *sendCrashReportCheckbox = new QCheckBox(QTStr("CrashHandling.Checkbox.SendReport"));
-		crashWarning.setCheckBox(sendCrashReportCheckbox);
-	}
-
-	QPushButton *launchSafeButton =
-		crashWarning.addButton(QTStr("CrashHandling.Buttons.LaunchSafe"), QMessageBox::AcceptRole);
-	QPushButton *launchNormalButton =
-		crashWarning.addButton(QTStr("CrashHandling.Buttons.LaunchNormal"), QMessageBox::RejectRole);
-
-	crashWarning.setDefaultButton(launchNormalButton);
-
-	crashWarning.exec();
-
-	bool useSafeMode = crashWarning.clickedButton() == launchSafeButton;
-
-	if (useSafeMode) {
-		launchAction.useSafeMode = true;
-
-		blog(LOG_INFO, "[Safe Mode] Safe mode launch selected, loading third-party plugins is disabled");
-	} else {
-		blog(LOG_WARNING, "[Safe Mode] Normal launch selected, loading third-party plugins is enabled");
-	}
-
-	bool sendCrashReport = (enableCrashUpload) ? crashWarning.checkBox()->isChecked() : false;
-
-	if (sendCrashReport) {
-		launchAction.sendCrashReport = true;
-
-		blog(LOG_INFO, "User selected to send crash report");
-	}
-
-	return launchAction;
+	blog(LOG_WARNING, "Crash or unclean shutdown detected, launching normally");
+	return UncleanLaunchAction{};
 }
 
 QAccessibleInterface *alignmentSelectorFactory(const QString &classname, QObject *object)
