@@ -673,6 +673,10 @@ obs_source_t *obs_source_duplicate(obs_source_t *source, const char *new_name, b
 
 	obs_data_apply(new_source->private_settings, source->private_settings);
 
+	new_source->output_filter = source->output_filter;
+	if (new_source->output_filter != 0)
+		os_atomic_inc_long(&obs->video.output_filtered_count);
+
 	if (source->info.type != OBS_SOURCE_TYPE_FILTER)
 		duplicate_filters(new_source, source, create_private);
 
@@ -719,6 +723,9 @@ void obs_source_destroy(struct obs_source *source)
 				"I guess.");
 		return;
 	}
+
+	if (source->output_filter != 0)
+		os_atomic_dec_long(&obs->video.output_filtered_count);
 
 	if (is_audio_source(source)) {
 		pthread_mutex_lock(&source->audio_cb_mutex);
@@ -5629,7 +5636,17 @@ void obs_source_set_output_filter(obs_source_t *source, enum obs_source_output_f
 {
 	if (!obs_ptr_valid(source, "obs_source_set_output_filter"))
 		return;
-	source->output_filter = (uint32_t)filter;
+
+	uint32_t old_filter = source->output_filter;
+	uint32_t new_filter = (uint32_t)filter;
+	if (old_filter != new_filter) {
+		if (old_filter == 0 && new_filter != 0)
+			os_atomic_inc_long(&obs->video.output_filtered_count);
+		else if (old_filter != 0 && new_filter == 0)
+			os_atomic_dec_long(&obs->video.output_filtered_count);
+	}
+
+	source->output_filter = new_filter;
 	obs_data_set_int(source->private_settings, "output_filter", (long long)filter);
 
 	struct calldata params;
