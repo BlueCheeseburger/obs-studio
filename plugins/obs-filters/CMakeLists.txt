@@ -6,6 +6,7 @@ add_library(OBS::filters ALIAS obs-filters)
 target_sources(
   obs-filters
   PRIVATE
+    adjustments-filter.c
     async-delay-filter.c
     chroma-key-filter.c
     color-correction-filter.c

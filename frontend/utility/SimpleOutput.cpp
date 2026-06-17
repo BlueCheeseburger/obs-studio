@@ -155,9 +155,9 @@ void SimpleOutput::LoadRecordingPreset()
 		bool success = false;
 
 		if (strcmp(audio_encoder, "opus") == 0)
-			success = CreateSimpleOpusEncoder(audioRecording, 192, "simple_opus_recording", 1);
+			success = CreateSimpleOpusEncoder(audioRecording, 192, "simple_opus_recording", 0);
 		else
-			success = CreateSimpleAACEncoder(audioRecording, 192, "simple_aac_recording", 1);
+			success = CreateSimpleAACEncoder(audioRecording, 192, "simple_aac_recording", 0);
 
 		if (!success)
 			throw "Failed to create audio recording encoder "

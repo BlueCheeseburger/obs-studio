@@ -28,6 +28,25 @@
 #include <qt-wrappers.hpp>
 
 #include <QLineEdit>
+#include <QWidgetAction>
+#include <QPainter>
+#include <QPixmap>
+#include <QIcon>
+#include <QAction>
+#include <QListWidget>
+#include <QLabel>
+#include <QFont>
+#include <QVBoxLayout>
+#include <QPushButton>
+#include <QKeyEvent>
+#include <QScreen>
+#include <QGuiApplication>
+
+#include <widgets/OBSProjector.hpp>
+
+#include <array>
+#include <cstring>
+#include <memory>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -145,11 +164,48 @@ OBSBasicFilters::OBSBasicFilters(QWidget *parent, OBSSource source_)
 	ui->actionRenameFilter->setShortcut({Qt::Key_F2});
 #endif
 
+	SetupAddPalettes();
+
+	if ((caps & OBS_SOURCE_VIDEO) != 0) {
+		QPushButton *fsButton = new QPushButton(ui->previewFrame);
+		fsButton->setIcon(QIcon(":/res/images/filters/fullscreen.svg"));
+		fsButton->setIconSize(QSize(18, 18));
+		fsButton->setFixedSize(28, 28);
+		fsButton->setCursor(Qt::PointingHandCursor);
+		fsButton->setToolTip(QTStr("Basic.Filters.FullscreenPreview"));
+		fsButton->setAutoDefault(false);
+		fsButton->setStyleSheet("QPushButton { background: rgba(0, 0, 0, 130); border: none; border-radius: 4px; }"
+					"QPushButton:hover { background: rgba(0, 0, 0, 190); }");
+		connect(fsButton, &QPushButton::clicked, this, &OBSBasicFilters::ToggleFullscreenPreview);
+
+		QHBoxLayout *fsRow = new QHBoxLayout();
+		fsRow->setContentsMargins(0, 4, 6, 4);
+		fsRow->addStretch();
+		fsRow->addWidget(fsButton);
+		ui->verticalLayout_7->addLayout(fsRow);
+	}
+
 	UpdateFilters();
 }
 
 OBSBasicFilters::~OBSBasicFilters()
 {
+	/* Close the overlay close-button first (it holds no OBS state). */
+	if (fsCloseBtn) {
+		QWidget *btn = fsCloseBtn;
+		fsCloseBtn = nullptr;
+		btn->close();
+	}
+
+	/* Tear down the fullscreen preview so its draw callback can't fire
+	 * against a half-destroyed dialog. */
+	if (fullscreenPreview) {
+		QWidget *fs = fullscreenPreview;
+		fullscreenPreview = nullptr;
+		fs->disconnect(this);
+		delete fs;
+	}
+
 	obs_source_dec_showing(source);
 	ClearListItems(ui->asyncFilters);
 	ClearListItems(ui->effectFilters);
@@ -291,6 +347,8 @@ void OBSBasicFilters::AddFilter(OBSSource filter, bool focus)
 		list->setCurrentItem(item);
 
 	SetupVisibilityItem(list, item, filter);
+
+	UpdateListVisibility();
 }
 
 void OBSBasicFilters::RemoveFilter(OBSSource filter)
@@ -309,6 +367,8 @@ void OBSBasicFilters::RemoveFilter(OBSSource filter)
 			break;
 		}
 	}
+
+	UpdateListVisibility();
 
 	const char *filterName = obs_source_get_name(filter);
 	const char *sourceName = obs_source_get_name(source);
@@ -404,6 +464,8 @@ void OBSBasicFilters::UpdateFilters()
 		ui->effectFilters->setCurrentItem(ui->effectFilters->item(0));
 	}
 
+	UpdateListVisibility();
+
 	main->SaveProject();
 }
 
@@ -444,25 +506,112 @@ static bool filter_compatible(bool async, uint32_t sourceFlags, uint32_t filterF
 	return (async && (filterAudio || filterAsync)) || (!async && !filterAudio && !filterAsync);
 }
 
-QMenu *OBSBasicFilters::CreateAddFilterPopupMenu(bool async)
+/*
+ * Filters are grouped into photo-editor style categories so the picker reads
+ * like the tool palette of an image editor rather than a flat type dump.
+ */
+enum class FilterCategory { Adjust, Color, Key, Stylize, Transform, Utility, Audio, Other };
+
+namespace {
+
+struct CategoryInfo {
+	FilterCategory category;
+	const char *localeKey;
+	const char *iconPath;
+};
+
+/* Display order of the categories in the picker. */
+static const std::array<CategoryInfo, 8> kFilterCategories = {{
+	{FilterCategory::Adjust, "Basic.Filters.Category.Adjust", ":/res/images/filters/adjust.svg"},
+	{FilterCategory::Color, "Basic.Filters.Category.Color", ":/res/images/filters/color.svg"},
+	{FilterCategory::Key, "Basic.Filters.Category.Key", ":/res/images/filters/key.svg"},
+	{FilterCategory::Stylize, "Basic.Filters.Category.Stylize", ":/res/images/filters/stylize.svg"},
+	{FilterCategory::Transform, "Basic.Filters.Category.Transform", ":/res/images/filters/transform.svg"},
+	{FilterCategory::Utility, "Basic.Filters.Category.Utility", ":/res/images/filters/utility.svg"},
+	{FilterCategory::Audio, "Basic.Filters.Category.Audio", ":/res/images/filters/audio.svg"},
+	{FilterCategory::Other, "Basic.Filters.Category.Other", ":/res/images/filters/more.svg"},
+}};
+
+/* OBS appends "_vN" to the registered id of versioned filters (e.g.
+ * "color_filter" becomes "color_filter_v2"), so match the base id and tolerate
+ * a trailing version suffix. */
+static bool FilterIdMatches(const char *id, const char *base)
 {
-	uint32_t sourceFlags = obs_source_get_output_flags(source);
-	const char *type_str;
-	bool foundValues = false;
-	size_t idx = 0;
+	size_t len = strlen(base);
+	if (strncmp(id, base, len) != 0)
+		return false;
+	return id[len] == '\0' || (id[len] == '_' && id[len + 1] == 'v');
+}
 
-	struct FilterInfo {
-		string type;
-		string name;
+static FilterCategory CategoryForFilter(const char *id, uint32_t filterFlags)
+{
+	/* Audio processors always live under Audio regardless of id. */
+	if ((filterFlags & OBS_SOURCE_AUDIO) != 0)
+		return FilterCategory::Audio;
 
-		inline FilterInfo(const char *type_, const char *name_) : type(type_), name(name_) {}
-
-		bool operator<(const FilterInfo &r) const { return name < r.name; }
+	struct Mapping {
+		const char *id;
+		FilterCategory category;
+	};
+	static const Mapping mappings[] = {
+		{"adjustments_filter", FilterCategory::Adjust},
+		{"color_filter", FilterCategory::Adjust},
+		{"sharpness_filter", FilterCategory::Adjust},
+		{"clut_filter", FilterCategory::Color},
+		{"hdr_tonemap_filter", FilterCategory::Color},
+		{"sdr_on_hdr_filter", FilterCategory::Color},
+		{"chroma_key_filter", FilterCategory::Key},
+		{"color_key_filter", FilterCategory::Key},
+		{"luma_key_filter", FilterCategory::Key},
+		{"mask_filter", FilterCategory::Stylize},
+		{"scroll_filter", FilterCategory::Stylize},
+		{"crop_filter", FilterCategory::Transform},
+		{"scale_filter", FilterCategory::Transform},
+		{"gpu_delay", FilterCategory::Utility},
+		{"async_delay_filter", FilterCategory::Utility},
 	};
 
-	vector<FilterInfo> types;
+	for (const Mapping &m : mappings) {
+		if (id && FilterIdMatches(id, m.id))
+			return m.category;
+	}
+	return FilterCategory::Other;
+}
+
+/* Category icons are baked with distinct colors so they show on any theme
+ * without runtime recoloring. */
+static QIcon CategoryIcon(FilterCategory category)
+{
+	for (const CategoryInfo &info : kFilterCategories) {
+		if (info.category == category)
+			return QIcon(QString::fromUtf8(info.iconPath));
+	}
+	return QIcon();
+}
+
+struct FilterTypeEntry {
+	std::string type;
+	std::string name;
+	FilterCategory category;
+
+	bool operator<(const FilterTypeEntry &r) const { return name < r.name; }
+};
+
+/* Enumerate every filter type compatible with the source, bucketed (and
+ * alphabetized within each bucket) by category. Shared by the popup menu and
+ * the always-visible inline palette. */
+static std::array<std::vector<FilterTypeEntry>, kFilterCategories.size()> CollectFilters(obs_source_t *source,
+											  bool async)
+{
+	std::array<std::vector<FilterTypeEntry>, kFilterCategories.size()> buckets;
+	if (!source)
+		return buckets;
+
+	uint32_t sourceFlags = obs_source_get_output_flags(source);
+	const char *type_str;
+	size_t idx = 0;
+
 	while (obs_enum_filter_types(idx++, &type_str)) {
-		const char *name = obs_source_get_display_name(type_str);
 		uint32_t caps = obs_get_source_output_flags(type_str);
 
 		if ((caps & OBS_SOURCE_DEPRECATED) != 0)
@@ -471,33 +620,307 @@ QMenu *OBSBasicFilters::CreateAddFilterPopupMenu(bool async)
 			continue;
 		if ((caps & OBS_SOURCE_CAP_OBSOLETE) != 0)
 			continue;
-
-		types.emplace_back(type_str, name);
-	}
-
-	sort(types.begin(), types.end());
-
-	QMenu *popup = new QMenu(QTStr("Add"), this);
-	for (FilterInfo &type : types) {
-		uint32_t filterFlags = obs_get_source_output_flags(type.type.c_str());
-
-		if (!filter_compatible(async, sourceFlags, filterFlags))
+		if (!filter_compatible(async, sourceFlags, caps))
 			continue;
 
-		QAction *popupItem = new QAction(QT_UTF8(type.name.c_str()), this);
-		popupItem->setData(QT_UTF8(type.type.c_str()));
-		connect(popupItem, &QAction::triggered, this, [this, type]() { AddNewFilter(type.type.c_str()); });
-		popup->addAction(popupItem);
+		/* The legacy Color Correction filter overlaps the new Adjustments
+		 * filter; hide it from the picker so Adjustments is the single,
+		 * clear choice. Existing instances keep working. */
+		if (FilterIdMatches(type_str, "color_filter"))
+			continue;
 
-		foundValues = true;
+		FilterTypeEntry entry;
+		entry.type = type_str;
+		entry.name = obs_source_get_display_name(type_str);
+		entry.category = CategoryForFilter(type_str, caps);
+
+		for (size_t i = 0; i < kFilterCategories.size(); i++) {
+			if (kFilterCategories[i].category == entry.category) {
+				buckets[i].emplace_back(std::move(entry));
+				break;
+			}
+		}
 	}
 
-	if (!foundValues) {
-		delete popup;
-		popup = nullptr;
+	for (auto &bucket : buckets)
+		std::sort(bucket.begin(), bucket.end());
+
+	return buckets;
+}
+
+} // namespace
+
+QMenu *OBSBasicFilters::CreateAddFilterPopupMenu(bool async)
+{
+	auto buckets = CollectFilters(source, async);
+
+	bool foundValues = false;
+	for (const auto &bucket : buckets) {
+		if (!bucket.empty()) {
+			foundValues = true;
+			break;
+		}
 	}
+
+	if (!foundValues)
+		return nullptr;
+
+	QMenu *popup = new QMenu(QTStr("Add"), this);
+
+	/* Search box pinned to the top of the picker. */
+	QLineEdit *search = new QLineEdit(popup);
+	search->setPlaceholderText(QTStr("Basic.Filters.Search"));
+	search->setClearButtonEnabled(true);
+	search->setMinimumWidth(220);
+	QWidgetAction *searchAction = new QWidgetAction(popup);
+	searchAction->setDefaultWidget(search);
+	popup->addAction(searchAction);
+
+	struct MenuGroup {
+		QAction *section;
+		vector<QAction *> actions;
+	};
+	auto groups = std::make_shared<vector<MenuGroup>>();
+
+	for (size_t i = 0; i < kFilterCategories.size(); i++) {
+		if (buckets[i].empty())
+			continue;
+
+		const CategoryInfo &cat = kFilterCategories[i];
+		const QIcon icon = CategoryIcon(cat.category);
+
+		MenuGroup group;
+		group.section = popup->addSection(icon, QTStr(cat.localeKey));
+
+		for (FilterTypeEntry &type : buckets[i]) {
+			QAction *item = new QAction(icon, QT_UTF8(type.name.c_str()), popup);
+			item->setData(QT_UTF8(type.type.c_str()));
+			std::string id = type.type;
+			connect(item, &QAction::triggered, this, [this, id]() { AddNewFilter(id.c_str()); });
+			popup->addAction(item);
+			group.actions.push_back(item);
+		}
+
+		groups->push_back(std::move(group));
+	}
+
+	/* Live filter as the user types; hide empty category headers. */
+	connect(search, &QLineEdit::textChanged, popup, [groups](const QString &text) {
+		for (const MenuGroup &group : *groups) {
+			bool anyVisible = false;
+			for (QAction *action : group.actions) {
+				bool visible = text.isEmpty() || action->text().contains(text, Qt::CaseInsensitive);
+				action->setVisible(visible);
+				anyVisible = anyVisible || visible;
+			}
+			if (group.section)
+				group.section->setVisible(anyVisible);
+		}
+	});
+
+	connect(popup, &QMenu::aboutToShow, search, [search]() { search->setFocus(); });
 
 	return popup;
+}
+
+/* Build the inline "Add a filter" palettes under each filter list and wire a
+ * single click to add the chosen filter. */
+/* Hide the applied-filter list, its label and toolbar while empty so the dialog
+ * shows just the "Add a filter" palette; they reappear once a filter exists. */
+void OBSBasicFilters::UpdateListVisibility()
+{
+	bool hasAsync = ui->asyncFilters->count() > 0;
+	ui->asyncFilters->setVisible(hasAsync);
+	ui->asyncLabel->setVisible(hasAsync);
+	ui->widget->setVisible(hasAsync);
+
+	bool hasEffect = ui->effectFilters->count() > 0;
+	ui->effectFilters->setVisible(hasEffect);
+	ui->label_2->setVisible(hasEffect);
+	ui->widget_2->setVisible(hasEffect);
+}
+
+void OBSBasicFilters::SetupAddPalettes()
+{
+	auto build = [this](QVBoxLayout *layout, bool async) -> QListWidget * {
+		QLabel *label = new QLabel(QTStr("Basic.Filters.AddFilter.Browse"));
+
+		QListWidget *paletteList = new QListWidget();
+		paletteList->setIconSize(QSize(16, 16));
+		paletteList->setSelectionMode(QAbstractItemView::NoSelection);
+		paletteList->setMinimumHeight(140);
+		paletteList->setProperty("class", "filter-palette");
+
+		layout->addWidget(label);
+		layout->addWidget(paletteList);
+
+		connect(paletteList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+			const QString id = item->data(Qt::UserRole).toString();
+			if (!id.isEmpty())
+				AddNewFilter(id.toUtf8().constData());
+		});
+
+		PopulateAddPalette(paletteList, async);
+		return paletteList;
+	};
+
+	asyncAddList = build(ui->verticalLayout_3, true);
+	effectAddList = build(ui->verticalLayout_4, false);
+}
+
+/* Fill an always-visible palette list with every compatible filter, grouped by
+ * category, so a single click adds a filter without opening the Add menu. */
+void OBSBasicFilters::PopulateAddPalette(QListWidget *list, bool async)
+{
+	if (!list)
+		return;
+
+	list->clear();
+
+	auto buckets = CollectFilters(source, async);
+
+	for (size_t i = 0; i < kFilterCategories.size(); i++) {
+		if (buckets[i].empty())
+			continue;
+
+		const CategoryInfo &cat = kFilterCategories[i];
+		const QIcon icon = CategoryIcon(cat.category);
+
+		QListWidgetItem *header = new QListWidgetItem(QTStr(cat.localeKey), list);
+		header->setFlags(Qt::NoItemFlags);
+		QFont headerFont = header->font();
+		headerFont.setBold(true);
+		header->setFont(headerFont);
+		header->setData(Qt::UserRole, QString());
+
+		for (FilterTypeEntry &type : buckets[i]) {
+			QListWidgetItem *item = new QListWidgetItem(icon, QT_UTF8(type.name.c_str()), list);
+			item->setData(Qt::UserRole, QString::fromStdString(type.type));
+			item->setToolTip(QTStr("Basic.Filters.AddFilter.ClickToAdd"));
+		}
+	}
+}
+
+/* Show the source on a fullscreen projector while the Filters dialog moves
+ * to the left side of the screen as a movable overlay.
+ *
+ * Key design constraints:
+ *  - Do NOT call projector->SetIsAlwaysOnTop() — it calls setWindowFlags()
+ *    internally, which destroys and recreates the projector's native HWND and
+ *    loses the showFullScreen() state.  The projector then re-shows in windowed
+ *    mode.
+ *  - Do NOT call raise() on the dialog after the projector is up — on Windows
+ *    raise() can activate the dialog window, which causes the OS to push the
+ *    (borderless-windowed) fullscreen projector behind it.
+ *  - Set Qt::WindowStaysOnTopHint on the dialog BEFORE creating the projector
+ *    so the projector's activateWindow() (fired at the end of its constructor)
+ *    doesn't bury the dialog.  The flag change is applied during our own
+ *    show() call at the end, after the projector is already fullscreen.
+ *  - Force Qt::BlankCursor on the projector to suppress the hardware-cursor
+ *    trail artifact that occurs over OBS's OpenGL surface.
+ */
+void OBSBasicFilters::ToggleFullscreenPreview()
+{
+	if (fullscreenPreview) {
+		fullscreenPreview->close();
+		return;
+	}
+
+	QScreen *targetScreen = screen();
+	int monitor = QGuiApplication::screens().indexOf(targetScreen);
+	if (monitor < 0) {
+		monitor = 0;
+		targetScreen = QGuiApplication::screens().value(0);
+	}
+
+	/* Remember where the dialog was so we can put it back. */
+	preFullscreenGeometry = geometry();
+
+	/* Stage the dialog's WindowStaysOnTopHint flag change before the projector
+	 * is created.  The native HWND isn't recreated until the next show() call,
+	 * so this is side-effect free here. */
+	setWindowFlag(Qt::WindowStaysOnTopHint, true);
+
+	/* Create the projector.  Its constructor calls SetMonitor → showFullScreen()
+	 * then show() + activateWindow() — all before we return here. */
+	OBSProjector *projector = new OBSProjector(nullptr, source, monitor, ProjectorType::Source);
+
+	/* Blank the hardware cursor so it doesn't leave artifact trails on the
+	 * OpenGL surface.  (OBSProjector::SetHideCursor does the same when the
+	 * "HideProjectorCursor" config key is set; we force it unconditionally.) */
+	projector->setCursor(Qt::BlankCursor);
+
+	fullscreenPreview = projector;
+
+	/* ---- Floating ✕ button in the top-right corner of the screen ---- */
+	QRect screenRect = targetScreen ? targetScreen->geometry() : QGuiApplication::primaryScreen()->geometry();
+
+	QWidget *overlay = new QWidget(nullptr);
+	overlay->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+	overlay->setAttribute(Qt::WA_TranslucentBackground);
+	overlay->setAttribute(Qt::WA_DeleteOnClose);
+
+	QPushButton *closeBtn = new QPushButton(QStringLiteral("✕"), overlay);
+	closeBtn->setFixedSize(36, 36);
+	closeBtn->setAutoDefault(false);
+	closeBtn->setStyleSheet(
+		"QPushButton {"
+		"  background: rgba(0,0,0,160);"
+		"  color: white;"
+		"  border: none;"
+		"  border-radius: 4px;"
+		"  font-size: 16px;"
+		"}"
+		"QPushButton:hover { background: rgba(200,50,50,220); }");
+
+	QVBoxLayout *ol = new QVBoxLayout(overlay);
+	ol->setContentsMargins(0, 0, 0, 0);
+	ol->addWidget(closeBtn);
+	overlay->setFixedSize(36, 36);
+	overlay->move(screenRect.right() - 46, screenRect.top() + 10);
+	overlay->show();
+
+	fsCloseBtn = overlay;
+
+	connect(closeBtn, &QPushButton::clicked, this, [this]() {
+		if (fullscreenPreview)
+			fullscreenPreview->close();
+	});
+
+	/* ---- Restore everything when the projector closes ---- */
+	connect(projector, &QObject::destroyed, this, [this]() {
+		if (fsCloseBtn) {
+			QWidget *btn = fsCloseBtn;
+			fsCloseBtn = nullptr;
+			btn->close();
+		}
+		setWindowFlag(Qt::WindowStaysOnTopHint, false);
+		setGeometry(preFullscreenGeometry);
+		show();
+	});
+
+	/* ---- Slide the dialog to the left edge of the screen ---- */
+	int newX = screenRect.left() + 10;
+	int newY = screenRect.top() + (screenRect.height() - height()) / 2;
+	newY = qMax(newY, screenRect.top() + 10);
+	move(newX, newY);
+
+	/* Apply the staged WindowStaysOnTopHint (recreates HWND with WS_EX_TOPMOST)
+	 * and re-show.  Do NOT call raise() — that steals activation and can push
+	 * the projector behind the dialog on Windows. */
+	show();
+}
+
+/* Intercept Esc so it closes fullscreen preview instead of the dialog when
+ * a projector is open.  All other keys fall through to QDialog. */
+void OBSBasicFilters::keyPressEvent(QKeyEvent *event)
+{
+	if (event->key() == Qt::Key_Escape && fullscreenPreview) {
+		ToggleFullscreenPreview();
+		event->accept();
+		return;
+	}
+	QDialog::keyPressEvent(event);
 }
 
 void OBSBasicFilters::AddNewFilter(const char *id)

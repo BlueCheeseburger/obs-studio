@@ -50,6 +50,17 @@ static bool enumItem(obs_scene_t *, obs_sceneitem_t *item, void *ptr)
 		return true;
 	}
 
+	/* Audio-only sources (no video output) are managed exclusively in the
+	 * Audio Mixer — they do not clutter the visual Sources panel. Sources
+	 * with both video AND audio (e.g. webcam) still appear here because
+	 * they have a visual presence in the scene. */
+	uint32_t srcFlags = obs_source_get_output_flags(src);
+	bool hasAudio = (srcFlags & OBS_SOURCE_AUDIO) != 0;
+	bool hasVideo = (srcFlags & OBS_SOURCE_VIDEO) != 0;
+	if (hasAudio && !hasVideo) {
+		return true;
+	}
+
 	if (obs_sceneitem_is_group(item)) {
 		OBSDataAutoRelease data = obs_sceneitem_get_private_settings(item);
 
@@ -173,6 +184,17 @@ void SourceTreeModel::ReorderItems()
 
 void SourceTreeModel::Add(obs_sceneitem_t *item)
 {
+	/* Audio-only sources are hidden from the Sources panel (same rule as
+	 * enumItem above). They remain active scene items so the Audio Mixer
+	 * picks them up. */
+	obs_source_t *src = obs_sceneitem_get_source(item);
+	uint32_t srcFlags = obs_source_get_output_flags(src);
+	bool hasAudio = (srcFlags & OBS_SOURCE_AUDIO) != 0;
+	bool hasVideo = (srcFlags & OBS_SOURCE_VIDEO) != 0;
+	if (hasAudio && !hasVideo) {
+		return;
+	}
+
 	if (obs_sceneitem_is_group(item)) {
 		SceneChanged();
 	} else {

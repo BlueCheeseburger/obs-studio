@@ -607,6 +607,24 @@ void OBSBasic::on_scenes_customContextMenuRequested(const QPoint &pos)
 
 		connect(multiviewAction, &QAction::triggered, multiviewAction, std::bind(showInMultiview, data.Get()));
 
+		/* Only expose the per-scene exclusion when auto live thumbnail is
+		 * actually enabled in Settings. */
+		if (AutoThumbnailEnabled()) {
+			QAction *excludeThumbAction =
+				popup.addAction(QTStr("Basic.Scene.ExcludeFromAutoThumbnail"));
+			obs_data_set_default_bool(data, "exclude_from_auto_thumbnail", false);
+			bool excluded = obs_data_get_bool(data, "exclude_from_auto_thumbnail");
+			excludeThumbAction->setCheckable(true);
+			excludeThumbAction->setChecked(excluded);
+
+			auto toggleExcludeThumb = [](OBSData data) {
+				bool cur = obs_data_get_bool(data, "exclude_from_auto_thumbnail");
+				obs_data_set_bool(data, "exclude_from_auto_thumbnail", !cur);
+			};
+			connect(excludeThumbAction, &QAction::triggered, excludeThumbAction,
+				std::bind(toggleExcludeThumb, data.Get()));
+		}
+
 		copyFilters->setEnabled(obs_source_filter_count(source) > 0);
 	}
 

@@ -3,7 +3,15 @@
 
 #include <widgets/OBSBasic.hpp>
 
+#include <QDesktopServices>
+#include <QFileInfo>
 #include <QLabel>
+#include <QProcess>
+#include <QUrl>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "moc_OBSBasicStatusBar.cpp"
 
@@ -47,6 +55,10 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	messageTimer = new QTimer(this);
 	messageTimer->setSingleShot(true);
 	connect(messageTimer, &QTimer::timeout, this, &OBSBasicStatusBar::clearMessage);
+
+	statusWidget->ui->message->setOpenExternalLinks(false);
+	connect(statusWidget->ui->message, &QLabel::linkActivated, this, &OBSBasicStatusBar::onCapCutLinkActivated);
+	connect(statusWidget->ui->message, &QLabel::linkHovered, this, &OBSBasicStatusBar::onCapCutLinkHovered);
 
 	clearMessage();
 }
@@ -579,7 +591,9 @@ void OBSBasicStatusBar::UpdateIcons()
 void OBSBasicStatusBar::showMessage(const QString &message, int timeout)
 {
 	messageTimer->stop();
+	capCutFilePath.clear();
 
+	statusWidget->ui->message->setTextFormat(Qt::PlainText);
 	statusWidget->ui->message->setText(message);
 
 	if (timeout)
@@ -588,5 +602,71 @@ void OBSBasicStatusBar::showMessage(const QString &message, int timeout)
 
 void OBSBasicStatusBar::clearMessage()
 {
+	capCutFilePath.clear();
+	statusWidget->ui->message->setTextFormat(Qt::PlainText);
 	statusWidget->ui->message->setText("");
+}
+
+static QString capCutLinkHtml(const QString &label, bool underline)
+{
+	QString deco = underline ? "underline" : "none";
+	return QString("<a href='capcut://open' style='color: white; text-decoration: %1;'>%2</a>")
+		.arg(deco, label.toHtmlEscaped());
+}
+
+void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
+{
+	capCutFilePath = filePath;
+	capCutMessageBase = QTStr("Basic.StatusBar.RecordingSavedTo").arg(filePath.toHtmlEscaped());
+
+	QString html = capCutMessageBase + " &nbsp;" + capCutLinkHtml(QTStr("Basic.StatusBar.OpenInCapCut"), false);
+
+	messageTimer->stop();
+	statusWidget->ui->message->setTextFormat(Qt::RichText);
+	statusWidget->ui->message->setText(html);
+	messageTimer->start(30000);
+}
+
+void OBSBasicStatusBar::onCapCutLinkHovered(const QString &link)
+{
+	if (capCutFilePath.isEmpty())
+		return;
+
+	bool hovering = !link.isEmpty();
+	QString html = capCutMessageBase + " &nbsp;" + capCutLinkHtml(QTStr("Basic.StatusBar.OpenInCapCut"), hovering);
+	statusWidget->ui->message->setText(html);
+}
+
+void OBSBasicStatusBar::onCapCutLinkActivated(const QString &)
+{
+	if (capCutFilePath.isEmpty())
+		return;
+
+	QFileInfo fi(capCutFilePath);
+	QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
+
+#ifdef _WIN32
+	QStringList paths;
+
+	QString localAppData = QString::fromLocal8Bit(qgetenv("LOCALAPPDATA"));
+	if (!localAppData.isEmpty())
+		paths << localAppData + "\\CapCut\\Apps\\CapCut.exe";
+
+	QString programFiles = QString::fromLocal8Bit(qgetenv("ProgramFiles"));
+	if (!programFiles.isEmpty())
+		paths << programFiles + "\\CapCut\\CapCut.exe";
+
+	QString programFilesX86 = QString::fromLocal8Bit(qgetenv("ProgramFiles(x86)"));
+	if (!programFilesX86.isEmpty())
+		paths << programFilesX86 + "\\CapCut\\CapCut.exe";
+
+	for (const QString &path : paths) {
+		if (QFileInfo::exists(path)) {
+			QProcess::startDetached(path, {});
+			return;
+		}
+	}
+
+	ShellExecuteW(nullptr, L"open", L"CapCut.exe", nullptr, nullptr, SW_SHOWDEFAULT);
+#endif
 }

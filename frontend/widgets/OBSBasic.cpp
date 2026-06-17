@@ -39,6 +39,7 @@
 #include <dialogs/OBSBasicTransform.hpp>
 #include <models/SceneCollection.hpp>
 #include <settings/OBSBasicSettings.hpp>
+#include <utility/LiveThumbnailGrabber.hpp>
 #include <utility/QuickTransition.hpp>
 #include <utility/SceneRenameDelegate.hpp>
 #if defined(_WIN32) || defined(WHATSNEW_ENABLED)
@@ -2008,6 +2009,47 @@ void OBSBasic::closeWindow()
 #else
 	QMetaObject::invokeMethod(App(), "quit", Qt::QueuedConnection);
 #endif
+}
+
+void OBSBasic::SessionEndShutdown()
+{
+	if (isClosing())
+		return;
+
+	/* The OS is ending our session (shutdown / restart / log off). Unlike a
+	 * normal close we cannot show a prompt and we have very little time
+	 * before the process is forcibly terminated. If we let that happen while
+	 * audio sources are still capturing, the WASAPI capture callback keeps
+	 * writing samples into a source buffer that is being freed during
+	 * teardown, which crashes in obs_source_output_audio. To avoid that:
+	 *   1. Force-stop active outputs so recordings are finalized rather than
+	 *      left truncated.
+	 *   2. Run the standard closeWindow() teardown, which releases every
+	 *      source synchronously (joining the audio capture threads) before
+	 *      the process exits. */
+	if (outputHandler) {
+		if (outputHandler->StreamingActive())
+			outputHandler->StopStreaming(true);
+		if (outputHandler->RecordingActive())
+			outputHandler->StopRecording(true);
+		if (outputHandler->ReplayBufferActive())
+			outputHandler->StopReplayBuffer(true);
+		if (outputHandler->VirtualCamActive())
+			outputHandler->StopVirtualCam();
+
+		/* Pump events so the stop signals are delivered and the outputs
+		 * finalize their files before we tear down the sources they read
+		 * from. Bounded to ~2s so we never stall the OS shutdown. */
+		for (int i = 0; i < 100 && outputHandler &&
+				(outputHandler->StreamingActive() || outputHandler->RecordingActive() ||
+				 outputHandler->ReplayBufferActive());
+		     i++) {
+			QApplication::processEvents();
+			QThread::msleep(20);
+		}
+	}
+
+	closeWindow();
 }
 
 void OBSBasic::UpdateEditMenu()

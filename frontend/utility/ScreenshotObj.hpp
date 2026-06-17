@@ -48,6 +48,10 @@ public:
 	void setSize(QSize size);
 	void setSize(int width, int height);
 	void setSaveToFile(bool save);
+	/* Force the capture into 8-bit SDR even for HDR sources. Used by callers
+	 * (e.g. the live thumbnail grabber) that need a plain QImage rather than
+	 * the half-float JXR path. */
+	void setForceSDR(bool force) { forceSDR = force; }
 
 private:
 	Stage stage_ = Stage::Render;
@@ -67,6 +71,7 @@ private:
 	std::thread thread;
 	std::shared_ptr<QImage> imagePtr;
 	bool outputToFile = true;
+	bool forceSDR = false;
 
 signals:
 	void imageReady(QImage image);

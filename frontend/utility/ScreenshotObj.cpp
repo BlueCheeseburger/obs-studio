@@ -88,6 +88,11 @@ void ScreenshotObj::renderScreenshot()
 		/* Convert for JXR */
 		space = GS_CS_709_SCRGB;
 	}
+	if (forceSDR) {
+		/* Callers that need a plain 8-bit QImage cannot use the
+		 * half-float (scRGB/JXR) path; render straight to SDR. */
+		space = GS_CS_SRGB;
+	}
 #else
 	/* Tonemap to SDR if HDR */
 	const enum gs_color_space space = GS_CS_SRGB;

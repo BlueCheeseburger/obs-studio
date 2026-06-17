@@ -306,6 +306,7 @@ void OBSApp::InitUserConfigDefaults()
 
 	config_set_default_string(userConfig, "General", "HotkeyFocusType", "NeverDisableHotkeys");
 
+	config_set_default_bool(userConfig, "BasicWindow", "AutoThumbnailEnabled", false);
 	config_set_default_bool(userConfig, "BasicWindow", "PreviewEnabled", true);
 	config_set_default_bool(userConfig, "BasicWindow", "PreviewProgramMode", false);
 	config_set_default_bool(userConfig, "BasicWindow", "SceneDuplicationMode", true);
@@ -1895,7 +1896,15 @@ void OBSApp::commitData(QSessionManager &manager)
 
 		if (manager.allowsInteraction() && main->shouldPromptForClose()) {
 			manager.cancel();
+			return;
 		}
+
+		/* The OS session is ending (shutdown / restart / log off) and we
+		 * either have nothing active or cannot interactively prompt. Tear
+		 * down cleanly now instead of letting the process get killed
+		 * mid-capture, which crashes in the WASAPI audio callback as the
+		 * source buffers are freed out from under it. */
+		main->SessionEndShutdown();
 	}
 }
 

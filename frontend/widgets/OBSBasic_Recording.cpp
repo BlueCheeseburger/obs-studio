@@ -26,6 +26,8 @@
 
 #include <QDesktopServices>
 #include <QFileInfo>
+#include <QMessageBox>
+#include <QStringList>
 
 void OBSBasic::on_actionShow_Recordings_triggered()
 {
@@ -151,10 +153,85 @@ void OBSBasic::StopRecording()
 	OnDeactivate();
 }
 
+void OBSBasic::WarnIfAudioSourcesExcludedFromRecording()
+{
+	obs_output_t *out = outputHandler ? (obs_output_t *)outputHandler->fileOutput : nullptr;
+	if (!out)
+		return;
+
+	/* Determine which audio mixes the recording is ACTUALLY encoding by
+	 * reading the live output's audio encoders. Reading the real output
+	 * (instead of reconstructing the mask from config) keeps this correct
+	 * across Simple/Advanced modes and every container format. */
+	uint32_t recMask = 0;
+	bool haveEncoders = false;
+	for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
+		obs_encoder_t *enc = obs_output_get_audio_encoder(out, i);
+		if (enc) {
+			haveEncoders = true;
+			recMask |= (1u << obs_encoder_get_mixer_index(enc));
+		}
+	}
+
+	/* FFmpeg/Lossless output records audio via obs_output_set_media and has
+	 * no per-track audio encoders, so it captures everything — nothing to
+	 * warn about. */
+	if (!haveEncoders)
+		return;
+
+	struct CheckCtx {
+		uint32_t recMask;
+		QStringList excluded;
+	} ctx{recMask, {}};
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) -> bool {
+			auto *c = static_cast<CheckCtx *>(param);
+			uint32_t flags = obs_source_get_output_flags(source);
+			if ((flags & OBS_SOURCE_AUDIO) == 0)
+				return true;
+			/* Only flag sources that are actually producing audio and
+			 * not deliberately muted — those the user expects to hear. */
+			if (!obs_source_audio_active(source))
+				return true;
+			if (obs_source_muted(source))
+				return true;
+			uint32_t mixers = obs_source_get_audio_mixers(source);
+			if ((mixers & c->recMask) == 0)
+				c->excluded.append(QT_UTF8(obs_source_get_name(source)));
+			return true;
+		},
+		&ctx);
+
+	if (ctx.excluded.isEmpty())
+		return;
+
+	QString names = ctx.excluded.join(QStringLiteral(", "));
+	blog(LOG_WARNING,
+	     "Recording: the following audible audio source(s) are NOT being recorded "
+	     "(excluded from every recorded audio track): %s",
+	     QT_TO_UTF8(names));
+
+	ShowStatusBarMessage(QTStr("Basic.Recording.AudioExcludedWarning").arg(names));
+
+	/* This is data loss in progress, so make it impossible to miss. Shown
+	 * non-blocking; the recording keeps running. */
+	QMessageBox *box = new QMessageBox(this);
+	box->setAttribute(Qt::WA_DeleteOnClose);
+	box->setIcon(QMessageBox::Warning);
+	box->setWindowTitle(QTStr("Basic.Recording.AudioExcludedWarning.Title"));
+	box->setText(QTStr("Basic.Recording.AudioExcludedWarning.Text").arg(names));
+	box->setStandardButtons(QMessageBox::Ok);
+	box->setModal(false);
+	box->show();
+}
+
 void OBSBasic::RecordingStart()
 {
 	ui->statusbar->RecordingStarted(outputHandler->fileOutput);
 	emit RecordingStarted(isRecordingPausable);
+
+	WarnIfAudioSourcesExcludedFromRecording();
 
 	if (sysTrayRecord)
 		sysTrayRecord->setText(QTStr("Basic.Main.StopRecording"));
@@ -218,8 +295,7 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 	} else if (code == OBS_OUTPUT_SUCCESS) {
 		if (outputHandler) {
 			std::string path = outputHandler->lastRecordingPath;
-			QString str = QTStr("Basic.StatusBar.RecordingSavedTo");
-			ShowStatusBarMessage(str.arg(QT_UTF8(path.c_str())));
+			ui->statusbar->ShowRecordingSavedMessage(QT_UTF8(path.c_str()));
 		}
 	}
 
@@ -235,9 +311,7 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 
 void OBSBasic::RecordingFileChanged(QString lastRecordingPath)
 {
-	QString str = QTStr("Basic.StatusBar.RecordingSavedTo");
-	ShowStatusBarMessage(str.arg(lastRecordingPath));
-
+	ui->statusbar->ShowRecordingSavedMessage(lastRecordingPath);
 	AutoRemux(lastRecordingPath, true);
 }
 

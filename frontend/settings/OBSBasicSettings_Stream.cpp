@@ -11,6 +11,9 @@
 
 #include <qt-wrappers.hpp>
 
+#include <QCheckBox>
+#include <QLabel>
+#include <QLineEdit>
 #include <QUuid>
 
 static const QUuid &CustomServerUUID()
@@ -83,6 +86,13 @@ void OBSBasicSettings::InitStreamPage()
 	connect(ui->ignoreRecommended, &QCheckBox::clicked, this, &OBSBasicSettings::DisplayEnforceWarning);
 	connect(ui->ignoreRecommended, &QCheckBox::toggled, this, &OBSBasicSettings::UpdateResFPSLimits);
 
+	/* Auto live thumbnail (YouTube) opt-in. Created dynamically so it sits at
+	 * the bottom of the stream settings page; only shown for YouTube. */
+	autoThumbnailEnable = new QCheckBox(QTStr("Basic.Settings.Stream.AutoThumbnail"), this);
+	autoThumbnailEnable->setToolTip(QTStr("Basic.Settings.Stream.AutoThumbnail.Tooltip"));
+	ui->streamkeyPageLayout->addWidget(autoThumbnailEnable);
+	HookWidget(autoThumbnailEnable, &QCheckBox::toggled, &OBSBasicSettings::Stream1Changed);
+
 	connect(ui->enableMultitrackVideo, &QCheckBox::toggled, this, &OBSBasicSettings::UpdateMultitrackVideo);
 	connect(ui->multitrackVideoMaximumAggregateBitrateAuto, &QCheckBox::toggled, this,
 		&OBSBasicSettings::UpdateMultitrackVideo);
@@ -90,12 +100,50 @@ void OBSBasicSettings::InitStreamPage()
 		&OBSBasicSettings::UpdateMultitrackVideo);
 	connect(ui->multitrackVideoConfigOverrideEnable, &QCheckBox::toggled, this,
 		&OBSBasicSettings::UpdateMultitrackVideo);
+
+	/* Multi-stream: hide server URLs (defaults are pre-filled) and key
+	 * fields (shown only when the platform checkbox is ticked). */
+	ui->multiStreamYouTubeServerLabel->setVisible(false);
+	ui->multiStreamYouTubeServer->setVisible(false);
+	ui->multiStreamYouTubeKeyLabel->setVisible(false);
+	ui->multiStreamYouTubeKey->setVisible(false);
+	ui->multiStreamTwitchServerLabel->setVisible(false);
+	ui->multiStreamTwitchServer->setVisible(false);
+	ui->multiStreamTwitchKeyLabel->setVisible(false);
+	ui->multiStreamTwitchKey->setVisible(false);
+	ui->multiStreamTikTokServerLabel->setVisible(false);
+	ui->multiStreamTikTokServer->setVisible(false);
+	ui->multiStreamTikTokKeyLabel->setVisible(false);
+	ui->multiStreamTikTokKey->setVisible(false);
+
+	connect(ui->multiStreamYouTubeEnable, &QCheckBox::toggled, this, [this](bool checked) {
+		ui->multiStreamYouTubeKeyLabel->setVisible(checked);
+		ui->multiStreamYouTubeKey->setVisible(checked);
+	});
+	connect(ui->multiStreamTwitchEnable, &QCheckBox::toggled, this, [this](bool checked) {
+		ui->multiStreamTwitchKeyLabel->setVisible(checked);
+		ui->multiStreamTwitchKey->setVisible(checked);
+	});
+	connect(ui->multiStreamTikTokEnable, &QCheckBox::toggled, this, [this](bool checked) {
+		ui->multiStreamTikTokKeyLabel->setVisible(checked);
+		ui->multiStreamTikTokKey->setVisible(checked);
+	});
+
+	/* Explain the relationship between the main service and these extras. */
+	QLabel *multiStreamHelp = new QLabel(QTStr("Basic.Settings.Stream.MultiStream.Help"), this);
+	multiStreamHelp->setWordWrap(true);
+	multiStreamHelp->setProperty("class", "text-muted");
+	ui->multiStreamVLayout->insertWidget(0, multiStreamHelp);
 }
 
 void OBSBasicSettings::LoadStream1Settings()
 {
 	bool ignoreRecommended = config_get_bool(main->Config(), "Stream1", "IgnoreRecommended");
 	int whipSimulcastTotalLayers = config_get_int(main->Config(), "Stream1", "WHIPSimulcastTotalLayers");
+
+	if (autoThumbnailEnable)
+		autoThumbnailEnable->setChecked(
+			config_get_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled"));
 
 	obs_service_t *service_obj = main->GetService();
 	const char *type = obs_service_get_type(service_obj);
@@ -351,6 +399,15 @@ void OBSBasicSettings::SaveStream1Settings()
 
 	SaveCheckBox(ui->ignoreRecommended, "Stream1", "IgnoreRecommended");
 
+	if (autoThumbnailEnable) {
+		bool wasEnabled = config_get_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled");
+		bool nowEnabled = autoThumbnailEnable->isChecked();
+		if (wasEnabled != nowEnabled) {
+			config_set_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled", nowEnabled);
+			main->ApplyAutoThumbnailSetting(nowEnabled);
+		}
+	}
+
 	auto oldWHIPSimulcastTotalLayers = config_get_int(main->Config(), "Stream1", "WHIPSimulcastTotalLayers");
 	SaveSpinBox(ui->whipSimulcastTotalLayers, "Stream1", "WHIPSimulcastTotalLayers");
 
@@ -544,7 +601,8 @@ static inline bool is_external_oauth(const std::string &service)
 	return Auth::External(service);
 }
 
-static void reset_service_ui_fields(Ui::OBSBasicSettings *ui, std::string &service, bool loading)
+static void reset_service_ui_fields(Ui::OBSBasicSettings *ui, std::string &service, bool loading,
+				     bool authActive = false)
 {
 	bool external_oauth = is_external_oauth(service);
 	if (external_oauth) {
@@ -559,8 +617,8 @@ static void reset_service_ui_fields(Ui::OBSBasicSettings *ui, std::string &servi
 		int page = can_auth && (!loading || key.isEmpty()) ? (int)Section::Connect : (int)Section::StreamKey;
 
 		ui->streamStackWidget->setCurrentIndex(page);
-		ui->streamKeyWidget->setVisible(true);
-		ui->streamKeyLabel->setVisible(true);
+		ui->streamKeyWidget->setVisible(!authActive);
+		ui->streamKeyLabel->setVisible(!authActive);
 		ui->connectAccount2->setVisible(can_auth);
 		ui->useStreamKeyAdv->setVisible(false);
 	} else {
@@ -661,8 +719,20 @@ void OBSBasicSettings::ServiceChanged(bool resetFields)
 	ui->twitchAddonDropdown->setVisible(false);
 	ui->twitchAddonLabel->setVisible(false);
 
+	/* Determine whether OAuth is already connected for this service so
+	 * reset_service_ui_fields can suppress the key field immediately. */
+	bool authActive = false;
+	if (main->auth) {
+		const std::string svcAuth = main->auth->service();
+		authActive = service.find(svcAuth) != std::string::npos;
+#ifdef YOUTUBE_ENABLED
+		if (!authActive)
+			authActive = IsYouTubeService(svcAuth) && IsYouTubeService(service);
+#endif
+	}
+
 	if (resetFields || lastService != service.c_str()) {
-		reset_service_ui_fields(ui.get(), service, loading);
+		reset_service_ui_fields(ui.get(), service, loading, authActive);
 
 		ui->enableMultitrackVideo->setChecked(
 			config_get_bool(main->Config(), "Stream1", "EnableMultitrackVideo"));
@@ -684,6 +754,42 @@ void OBSBasicSettings::ServiceChanged(bool resetFields)
 		on_useAuth_toggled();
 	} else {
 		ui->serverStackedWidget->setCurrentIndex(0);
+	}
+
+	/* Hide the multi-stream row that matches the primary service so the
+	 * user can't accidentally add it as a secondary destination. */
+	{
+		QString svcName = ui->service->currentText();
+		bool ytIsPrimary = svcName.contains("YouTube", Qt::CaseInsensitive);
+		bool twIsPrimary = svcName.contains("Twitch", Qt::CaseInsensitive);
+		bool ttIsPrimary = svcName.contains("TikTok", Qt::CaseInsensitive);
+
+		auto setDestRowVisible = [](QCheckBox *cb, QLabel *keyLabel, QLineEdit *keyEdit, bool visible) {
+			cb->setVisible(visible);
+			if (!visible) {
+				keyLabel->setVisible(false);
+				keyEdit->setVisible(false);
+			} else {
+				keyLabel->setVisible(cb->isChecked());
+				keyEdit->setVisible(cb->isChecked());
+			}
+		};
+
+		setDestRowVisible(ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeKeyLabel,
+				  ui->multiStreamYouTubeKey, !ytIsPrimary);
+		setDestRowVisible(ui->multiStreamTwitchEnable, ui->multiStreamTwitchKeyLabel,
+				  ui->multiStreamTwitchKey, !twIsPrimary);
+		setDestRowVisible(ui->multiStreamTikTokEnable, ui->multiStreamTikTokKeyLabel,
+				  ui->multiStreamTikTokKey, !ttIsPrimary);
+	}
+
+	/* Auto live thumbnail is YouTube-only; only show the opt-in for YouTube. */
+	if (autoThumbnailEnable) {
+#ifdef YOUTUBE_ENABLED
+		autoThumbnailEnable->setVisible(IsYouTubeService(service));
+#else
+		autoThumbnailEnable->setVisible(false);
+#endif
 	}
 
 	auth.reset();

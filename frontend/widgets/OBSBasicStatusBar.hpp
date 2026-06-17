@@ -63,6 +63,9 @@ private:
 	QPointer<QTimer> refreshTimer;
 	QPointer<QTimer> messageTimer;
 
+	QString capCutFilePath;
+	QString capCutMessageBase;
+
 	obs_output_t *GetOutput();
 
 	void Activate();
@@ -90,6 +93,8 @@ private slots:
 	void UpdateStatusBar();
 	void UpdateCurrentFPS();
 	void UpdateIcons();
+	void onCapCutLinkActivated(const QString &link);
+	void onCapCutLinkHovered(const QString &link);
 
 public:
 	OBSBasicStatusBar(QWidget *parent);
@@ -104,4 +109,5 @@ public:
 	void RecordingUnpaused();
 
 	void ReconnectClear();
+	void ShowRecordingSavedMessage(const QString &filePath);
 };

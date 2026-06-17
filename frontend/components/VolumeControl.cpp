@@ -7,6 +7,7 @@
 #include <dialogs/NameDialog.hpp>
 #include <widgets/OBSBasic.hpp>
 
+#include <QIcon>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
@@ -103,6 +104,17 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 	audioFilterLabel->setFixedSize(14, 14);
 	audioFilterLabel->hide();
 
+	/* Noise suppression toggle — only on microphone sources (any audio
+	 * source whose name contains "mic", e.g. "Mic/Aux"). The themed icon
+	 * and green-when-active styling match the monitor button. */
+	if (sourceName.contains("mic", Qt::CaseInsensitive)) {
+		noiseSupprButton = new QPushButton(this);
+		noiseSupprButton->setCheckable(true);
+		noiseSupprButton->setToolTip(QTStr("Basic.AudioMixer.NoiseSuppress"));
+		utils->addClass(noiseSupprButton, "btn-noise-suppress");
+		utils->applyStateStylingEventFilter(noiseSupprButton);
+	}
+
 	bool muted = obs_source_muted(source);
 	bool unassigned = isSourceUnassigned(source);
 
@@ -132,6 +144,13 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 	obsSignals.emplace_back(obs_source_get_signal_handler(source), "destroy", VolumeControl::obsSourceDestroy,
 				this);
 
+	if (noiseSupprButton) {
+		obsSignals.emplace_back(obs_source_get_signal_handler(source), "filter_add",
+					VolumeControl::obsFilterChanged, this);
+		obsSignals.emplace_back(obs_source_get_signal_handler(source), "filter_remove",
+					VolumeControl::obsFilterChanged, this);
+	}
+
 	setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(this, &QWidget::customContextMenuRequested, this, &VolumeControl::showVolumeControlMenu);
 
@@ -141,6 +160,10 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 	connect(slider, &VolumeSlider::valueChanged, this, &VolumeControl::sliderChanged);
 	connect(muteButton, &QPushButton::clicked, this, &VolumeControl::handleMuteButton);
 	connect(monitorButton, &QPushButton::clicked, this, &VolumeControl::handleMonitorButton);
+	if (noiseSupprButton) {
+		connect(noiseSupprButton, &QPushButton::clicked, this, &VolumeControl::toggleNoiseSuppr);
+		updateNoiseSupprButton();
+	}
 
 	OBSBasic *main = OBSBasic::Get();
 	if (main) {
@@ -182,24 +205,20 @@ void VolumeControl::updateAudioOutputFilter()
 	if (!source)
 		return;
 
+	/* The old per-source "Audio Output Destination" feature stripped a
+	 * source from individual mixer tracks to fake stream/record audio
+	 * separation. In Simple Output mode streaming and recording share
+	 * track 1, so excluding a source from a track silently dropped it from
+	 * the recording (it still showed in the mixer). Heal any source left in
+	 * that broken state: restore it to all tracks and clear the flag. */
 	OBSDataAutoRelease priv = obs_source_get_private_settings(source);
 	int filter = (int)obs_data_get_int(priv, "audio_output_filter");
-
-	switch (filter) {
-	case 1:
-		audioFilterLabel->setText("S");
-		audioFilterLabel->setToolTip(QTStr("Basic.AudioMixer.AudioOutputFilter.Stream"));
-		audioFilterLabel->setVisible(true);
-		break;
-	case 2:
-		audioFilterLabel->setText("R");
-		audioFilterLabel->setToolTip(QTStr("Basic.AudioMixer.AudioOutputFilter.Record"));
-		audioFilterLabel->setVisible(true);
-		break;
-	default:
-		audioFilterLabel->setVisible(false);
-		break;
+	if (filter != 0) {
+		obs_source_set_audio_mixers(source, 0xFF);
+		obs_data_set_int(priv, "audio_output_filter", 0);
 	}
+
+	audioFilterLabel->setVisible(false);
 }
 
 const QIcon &VolumeControl::getUnassignedIcon()
@@ -319,6 +338,8 @@ void VolumeControl::setLayoutVertical(bool vertical)
 		// Add Headphone (audio monitoring) widget here
 		controlLayout->addWidget(muteButton);
 		controlLayout->addWidget(monitorButton);
+		if (noiseSupprButton)
+			controlLayout->addWidget(noiseSupprButton);
 		controlLayout->addWidget(audioFilterLabel);
 
 		meterLayout->setContentsMargins(0, 0, 0, 0);
@@ -395,6 +416,8 @@ void VolumeControl::setLayoutVertical(bool vertical)
 
 		buttonLayout->addWidget(muteButton);
 		buttonLayout->addWidget(monitorButton);
+		if (noiseSupprButton)
+			buttonLayout->addWidget(noiseSupprButton);
 		buttonLayout->addWidget(audioFilterLabel);
 
 		controlLayout->addItem(buttonLayout);
@@ -454,6 +477,15 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 	QAction *filtersAction = new QAction(QTStr("Filters"), popup);
 	QAction *propertiesAction = new QAction(QTStr("Properties"), popup);
 
+	/* Audio-only sources are hidden from the Sources panel, so they need a
+	 * Remove option here — otherwise there is no way to delete them. */
+	uint32_t srcOutputFlags = obs_source_get_output_flags(source);
+	bool isAudioOnly = (srcOutputFlags & OBS_SOURCE_AUDIO) && !(srcOutputFlags & OBS_SOURCE_VIDEO);
+	/* Only non-global audio-only sources (scene-item mic/capture sources
+	 * hidden from the Sources panel) need a Remove here. Global sources
+	 * (Desktop Audio, Mic/Aux) are managed through Audio Settings. */
+	QAction *removeAction = (isAudioOnly && !isGlobal) ? new QAction(QTStr("Remove"), popup) : nullptr;
+
 	// Set properties on actions that require source reference
 	hideAction->setProperty("source", QVariant::fromValue<OBSSource>(source));
 	pinAction->setProperty("source", QVariant::fromValue<OBSSource>(source));
@@ -485,6 +517,24 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 	connect(filtersAction, &QAction::triggered, main, &OBSBasic::actionOpenSourceFilters);
 	connect(propertiesAction, &QAction::triggered, main, &OBSBasic::actionOpenSourceProperties);
 
+	if (removeAction) {
+		OBSSource sourceRef = source;
+		connect(removeAction, &QAction::triggered, this, [this, sourceRef]() {
+			const char *name = obs_source_get_name(sourceRef);
+			QString text = QTStr("ConfirmRemove.Text").arg(QT_UTF8(name));
+			QMessageBox confirm(this);
+			confirm.setText(text);
+			QPushButton *yes = confirm.addButton(QTStr("Yes"), QMessageBox::YesRole);
+			confirm.setDefaultButton(yes);
+			confirm.addButton(QTStr("No"), QMessageBox::NoRole);
+			confirm.setIcon(QMessageBox::Question);
+			confirm.setWindowTitle(QTStr("ConfirmRemove.Title"));
+			confirm.exec();
+			if (yes == confirm.clickedButton())
+				obs_source_remove(sourceRef);
+		});
+	}
+
 	// Enable/disable actions
 	copyFiltersAction->setEnabled(obs_source_filter_count(source) > 0);
 	pasteFiltersAction->setEnabled(!obs_weak_source_expired(main->copyFiltersSource()));
@@ -512,41 +562,76 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 	popup->addAction(mixerRenameAction);
 	popup->addSeparator();
 
-	// Output Destination submenu (stream-only / record-only / all)
-	{
-		OBSDataAutoRelease priv = obs_source_get_private_settings(source);
-		int curFilter = (int)obs_data_get_int(priv, "audio_output_filter");
-		OBSWeakSource weakSrc = OBSGetWeakRef(source);
+	if (removeAction) {
+		popup->addAction(removeAction);
+		popup->addSeparator();
+	}
 
-		QMenu *audioFilterMenu = new QMenu(QTStr("Basic.AudioMixer.AudioOutputFilter"), popup);
-		auto addOpt = [&](const char *key, int val) {
-			QAction *a = audioFilterMenu->addAction(QTStr(key));
+	/* Output Visibility submenu — mirrors the video source panel behavior */
+	{
+		QMenu *outputFilterMenu = new QMenu(QTStr("OutputFilter"), popup);
+		auto curFilter = obs_source_get_output_filter(source);
+
+		auto makeOFAction = [&](const char *key, enum obs_source_output_filter val) {
+			QAction *a = outputFilterMenu->addAction(QTStr(key));
 			a->setCheckable(true);
 			a->setChecked(curFilter == val);
-			connect(a, &QAction::triggered, this, [this, weakSrc, val]() {
-				OBSSource src = OBSGetStrongRef(weakSrc);
-				if (!src)
-					return;
-				OBSDataAutoRelease p = obs_source_get_private_settings(src);
-				obs_data_set_int(p, "audio_output_filter", (long long)val);
-				switch (val) {
-				case 1:
-					obs_source_set_audio_mixers(src, 0x01);
-					break;
-				case 2:
-					obs_source_set_audio_mixers(src, 0xFE);
-					break;
-				default:
-					obs_source_set_audio_mixers(src, 0xFF);
-					break;
-				}
-				updateAudioOutputFilter();
+			OBSSource src = source;
+			connect(a, &QAction::triggered, this, [src, val]() {
+				obs_source_set_output_filter(src, val);
+				OBSBasic::Get()->SaveProject();
 			});
 		};
-		addOpt("Basic.AudioMixer.AudioOutputFilter.All", 0);
-		addOpt("Basic.AudioMixer.AudioOutputFilter.Stream", 1);
-		addOpt("Basic.AudioMixer.AudioOutputFilter.Record", 2);
-		popup->addMenu(audioFilterMenu);
+
+		makeOFAction("OutputFilter.All", OBS_SOURCE_OUTPUT_FILTER_ALL);
+		makeOFAction("OutputFilter.StreamOnly", OBS_SOURCE_OUTPUT_FILTER_STREAM);
+		makeOFAction("OutputFilter.RecordOnly", OBS_SOURCE_OUTPUT_FILTER_RECORD);
+		popup->addMenu(outputFilterMenu);
+	}
+
+	/* Noise Suppression submenu — only on mic sources (ones that have the
+	 * NS button). Enable toggle + Configure to open the filter's settings. */
+	if (noiseSupprButton) {
+		popup->addSeparator();
+		QMenu *nsMenu = new QMenu(QTStr("Basic.AudioMixer.NoiseSuppress"), popup);
+
+		struct NSCtx {
+			bool found = false;
+			bool enabled = false;
+			const char *name = nullptr;
+		} nsCtx;
+		obs_source_enum_filters(
+			source,
+			[](obs_source_t *, obs_source_t *filter, void *data) {
+				auto *c = static_cast<NSCtx *>(data);
+				if (strcmp(obs_source_get_unversioned_id(filter), "noise_suppress_filter") == 0) {
+					c->found = true;
+					c->enabled = obs_source_enabled(filter);
+					c->name = obs_source_get_name(filter);
+				}
+			},
+			&nsCtx);
+
+		QAction *nsEnableAction = new QAction(QTStr("Enable"), nsMenu);
+		nsEnableAction->setCheckable(true);
+		nsEnableAction->setChecked(nsCtx.found && nsCtx.enabled);
+		connect(nsEnableAction, &QAction::triggered, this, &VolumeControl::toggleNoiseSuppr);
+		nsMenu->addAction(nsEnableAction);
+
+		if (nsCtx.found && nsCtx.name) {
+			QAction *nsConfigAction = new QAction(QTStr("Configure"), nsMenu);
+			std::string filterName(nsCtx.name);
+			OBSSource srcRef = source;
+			connect(nsConfigAction, &QAction::triggered, this, [srcRef, filterName]() {
+				OBSSourceAutoRelease filter =
+					obs_source_get_filter_by_name(srcRef, filterName.c_str());
+				if (filter)
+					OBSBasic::Get()->CreatePropertiesWindow(filter);
+			});
+			nsMenu->addAction(nsConfigAction);
+		}
+
+		popup->addMenu(nsMenu);
 	}
 
 	popup->addSeparator();
@@ -1094,4 +1179,83 @@ void VolumeControl::setLevels(const float magnitude[MAX_AUDIO_CHANNELS], const f
 	if (volumeMeter) {
 		volumeMeter->setLevels(magnitude, peak, inputPeak);
 	}
+}
+
+void VolumeControl::toggleNoiseSuppr()
+{
+	OBSSource source = OBSGetStrongRef(weakSource());
+	if (!source)
+		return;
+
+	/* Find any existing noise suppression filter by type, capture its name
+	 * so we can retrieve it via obs_source_get_filter_by_name (which returns
+	 * a properly ref-counted handle without needing obs_source_addref). */
+	struct FindCtx {
+		const char *name = nullptr;
+	} ctx;
+
+	obs_source_enum_filters(
+		source,
+		[](obs_source_t *, obs_source_t *filter, void *data) {
+			auto *c = static_cast<FindCtx *>(data);
+			if (!c->name &&
+			    strcmp(obs_source_get_unversioned_id(filter), "noise_suppress_filter") == 0)
+				c->name = obs_source_get_name(filter);
+		},
+		&ctx);
+
+	if (ctx.name) {
+		OBSSourceAutoRelease filter = obs_source_get_filter_by_name(source, ctx.name);
+		if (filter)
+			obs_source_set_enabled(filter, !obs_source_enabled(filter));
+	} else {
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_string(settings, "method", "rnnoise");
+		OBSSourceAutoRelease filter =
+			obs_source_create("noise_suppress_filter", "Noise Suppression", settings, nullptr);
+		if (filter)
+			obs_source_filter_add(source, filter);
+	}
+
+	updateNoiseSupprButton();
+}
+
+void VolumeControl::updateNoiseSupprButton()
+{
+	if (!noiseSupprButton)
+		return;
+	OBSSource source = OBSGetStrongRef(weakSource());
+	if (!source)
+		return;
+
+	struct CheckCtx {
+		bool found = false;
+		bool enabled = false;
+	} ctx;
+
+	obs_source_enum_filters(
+		source,
+		[](obs_source_t *, obs_source_t *filter, void *data) {
+			auto *c = static_cast<CheckCtx *>(data);
+			if (strcmp(obs_source_get_unversioned_id(filter), "noise_suppress_filter") == 0) {
+				c->found = true;
+				c->enabled = obs_source_enabled(filter);
+			}
+		},
+		&ctx);
+
+	bool active = ctx.found && ctx.enabled;
+	noiseSupprButton->setChecked(active);
+
+	/* Qt can't swap the QPushButton icon via the :checked pseudo-state in
+	 * QSS, so mirror the state into a "checked" class (same approach as the
+	 * mute/monitor buttons) and re-polish to apply the green styling. */
+	utils->toggleClass(noiseSupprButton, "checked", active);
+	style()->polish(noiseSupprButton);
+}
+
+void VolumeControl::obsFilterChanged(void *data, calldata_t *)
+{
+	QMetaObject::invokeMethod(static_cast<VolumeControl *>(data), "updateNoiseSupprButton",
+				  Qt::QueuedConnection);
 }
