@@ -41,8 +41,10 @@
 #include <util/util.hpp>
 
 #include <QAccessible>
+#include <QImage>
 #include <QSystemTrayIcon>
 
+#include <atomic>
 #include <deque>
 
 extern volatile bool recording_paused;
@@ -55,6 +57,7 @@ class OBSBasicInteraction;
 class OBSBasicProperties;
 class OBSBasicSourceSelect;
 class OBSBasicTransform;
+class LiveThumbnailGrabber;
 class OBSLogViewer;
 class OBSMissingFiles;
 class OBSProjector;
@@ -318,6 +321,7 @@ public:
 	inline bool isClosing() { return isClosing_; }
 	inline bool isClosePromptOpen() { return isClosePromptOpen_; }
 	void closeWindow();
+	void SessionEndShutdown();
 
 protected:
 	bool isReadyToClose();
@@ -1025,6 +1029,11 @@ public slots:
 
 	bool RecordingActive();
 
+	/* Safety net: warns if an audible audio source can't reach any track the
+	 * recording is actually encoding (e.g. it was excluded from the mixer
+	 * tracks). Reads the live output so it is correct in every output mode. */
+	void WarnIfAudioSourcesExcludedFromRecording();
+
 signals:
 	/* Recording signals */
 	void RecordingStarted(bool pausable = false);
@@ -1332,6 +1341,37 @@ public:
 private:
 	QPointer<QObject> screenshotData;
 	std::string lastScreenshot;
+
+	std::unique_ptr<LiveThumbnailGrabber> liveThumbnailGrabber;
+
+	/* Upload state. The two flags are shared_ptrs so the detached upload
+	 * thread can touch them without referencing OBSBasic (avoids a
+	 * use-after-free if the window is destroyed mid-upload). The remaining
+	 * fields are only ever touched on the UI thread. */
+	std::shared_ptr<std::atomic<bool>> thumbnailUploadInFlight = std::make_shared<std::atomic<bool>>(false);
+	std::shared_ptr<std::atomic<bool>> thumbnailUploadFailed = std::make_shared<std::atomic<bool>>(false);
+	uint64_t thumbnailUploadStartedAt = 0;
+	uint64_t thumbnailUploadBackoffUntil = 0;
+	int thumbnailUploadBackoffStep = 0;
+	int thumbnailUploadsToday = 0;
+	int64_t thumbnailUploadDayStart = 0;
+
+public:
+	/* Called by LiveThumbnailGrabber when a grabbed frame passes its quality
+	 * filters; uploads it as the current YouTube broadcast thumbnail. */
+	void OnAutoThumbnailAccepted(const QImage &image);
+
+	/* Applied from Settings when the auto-thumbnail opt-in changes; starts or
+	 * stops the grabber if a stream is currently active. */
+	void ApplyAutoThumbnailSetting(bool enabled);
+
+	/* Whether the auto live thumbnail opt-in is currently enabled. Used to
+	 * gate the per-scene exclude action in the scene context menu. */
+	bool AutoThumbnailEnabled() const;
+
+private:
+	void MaybeStartLiveThumbnailGrabber();
+	void StopLiveThumbnailGrabber();
 
 private slots:
 	void Screenshot(OBSSource source_ = nullptr);

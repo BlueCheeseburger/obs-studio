@@ -25,7 +25,15 @@
 #include <utility/YoutubeApiWrappers.hpp>
 #endif
 
+#include <utility/LiveThumbnailGrabber.hpp>
+
 #include <qt-wrappers.hpp>
+
+#include <QDir>
+#include <QImage>
+
+#include <ctime>
+#include <thread>
 
 using namespace std;
 
@@ -122,6 +130,141 @@ void OBSBasic::ShowYouTubeAutoStartWarning()
 	}
 }
 #endif
+
+/* Conservative ceiling on uploads per rolling 24h. thumbnails.set costs ~50
+ * quota units; the default project quota is 10,000/day, so 120 uploads (~6,000
+ * units) leaves comfortable headroom for the rest of the YouTube integration. */
+static constexpr int kMaxThumbnailUploadsPerDay = 120;
+/* Backoff bounds (seconds) applied after a failed upload, doubling each time. */
+static constexpr uint64_t kThumbBackoffBaseSec = 60;
+static constexpr uint64_t kThumbBackoffMaxSec = 30 * 60;
+static constexpr uint64_t kThumbStaleInFlightNs = 60ULL * 1000000000ULL;
+
+void OBSBasic::MaybeStartLiveThumbnailGrabber()
+{
+#ifdef YOUTUBE_ENABLED
+	if (!config_get_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled"))
+		return;
+
+	Auth *a = GetAuth();
+	if (!a || !IsYouTubeService(a->service()))
+		return;
+
+	if (!liveThumbnailGrabber)
+		liveThumbnailGrabber = std::make_unique<LiveThumbnailGrabber>(this);
+
+	liveThumbnailGrabber->start();
+#endif
+}
+
+void OBSBasic::StopLiveThumbnailGrabber()
+{
+	if (liveThumbnailGrabber)
+		liveThumbnailGrabber->stop();
+}
+
+bool OBSBasic::AutoThumbnailEnabled() const
+{
+	return config_get_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled");
+}
+
+void OBSBasic::ApplyAutoThumbnailSetting(bool enabled)
+{
+	if (enabled) {
+		if (outputHandler && outputHandler->StreamingActive())
+			MaybeStartLiveThumbnailGrabber();
+	} else {
+		StopLiveThumbnailGrabber();
+	}
+}
+
+void OBSBasic::OnAutoThumbnailAccepted(const QImage &image)
+{
+#ifdef YOUTUBE_ENABLED
+	std::shared_ptr<YoutubeApiWrappers> ytAuth = dynamic_pointer_cast<YoutubeApiWrappers>(auth);
+	if (!ytAuth)
+		return;
+
+	QString broadcastId = ytAuth->GetBroadcastId();
+	if (broadcastId.isEmpty()) {
+		blog(LOG_INFO, "[LiveThumbnail] No broadcast id yet, skipping upload");
+		return;
+	}
+
+	const uint64_t mono = os_gettime_ns();
+
+	/* Apply backoff based on the result of the previous upload (read here on
+	 * the UI thread; the worker only writes the shared flag). */
+	if (thumbnailUploadFailed->exchange(false)) {
+		thumbnailUploadBackoffStep++;
+		uint64_t sec = kThumbBackoffBaseSec << (thumbnailUploadBackoffStep - 1);
+		if (sec > kThumbBackoffMaxSec)
+			sec = kThumbBackoffMaxSec;
+		thumbnailUploadBackoffUntil = mono + sec * 1000000000ULL;
+		blog(LOG_WARNING, "[LiveThumbnail] Previous upload failed; backing off %llu s",
+		     (unsigned long long)sec);
+	} else {
+		thumbnailUploadBackoffStep = 0;
+	}
+
+	if (thumbnailUploadBackoffUntil && mono < thumbnailUploadBackoffUntil) {
+		blog(LOG_INFO, "[LiveThumbnail] In backoff window, skipping upload");
+		return;
+	}
+
+	/* Rolling 24h upload cap as a hard quota safety net. */
+	int64_t nowSec = (int64_t)time(nullptr);
+	if (thumbnailUploadDayStart == 0 || nowSec - thumbnailUploadDayStart >= 86400) {
+		thumbnailUploadDayStart = nowSec;
+		thumbnailUploadsToday = 0;
+	}
+	if (thumbnailUploadsToday >= kMaxThumbnailUploadsPerDay) {
+		blog(LOG_INFO, "[LiveThumbnail] Daily thumbnail upload cap reached (%d), skipping",
+		     kMaxThumbnailUploadsPerDay);
+		return;
+	}
+
+	/* Only one upload in flight at a time. If a previous upload appears stuck
+	 * for an unreasonably long time, assume it died and proceed anyway. */
+	bool expected = false;
+	if (!thumbnailUploadInFlight->compare_exchange_strong(expected, true)) {
+		if (mono - thumbnailUploadStartedAt < kThumbStaleInFlightNs) {
+			blog(LOG_INFO, "[LiveThumbnail] Previous upload still in flight, skipping");
+			return;
+		}
+		blog(LOG_WARNING, "[LiveThumbnail] Previous upload appears stuck; proceeding");
+		*thumbnailUploadInFlight = true;
+	}
+	thumbnailUploadStartedAt = mono;
+
+	QString path = QDir(QDir::tempPath()).filePath("obs_live_thumbnail.jpg");
+	if (!image.save(path, "JPG", 90)) {
+		blog(LOG_WARNING, "[LiveThumbnail] Failed to write thumbnail file '%s'", QT_TO_UTF8(path));
+		*thumbnailUploadInFlight = false;
+		return;
+	}
+
+	thumbnailUploadsToday++;
+
+	/* Capture only the shared flags (not `this`) so the thread is safe even
+	 * if the main window is torn down before it finishes. */
+	auto inFlight = thumbnailUploadInFlight;
+	auto failed = thumbnailUploadFailed;
+	std::thread([ytAuth, broadcastId, path, inFlight, failed]() {
+		bool ok = ytAuth->SetVideoThumbnail(broadcastId, path);
+		if (ok) {
+			blog(LOG_INFO, "[LiveThumbnail] Broadcast thumbnail updated");
+		} else {
+			blog(LOG_WARNING, "[LiveThumbnail] Thumbnail upload failed: %s",
+			     QT_TO_UTF8(ytAuth->GetLastError()));
+			*failed = true;
+		}
+		*inFlight = false;
+	}).detach();
+#else
+	UNUSED_PARAMETER(image);
+#endif
+}
 
 void OBSBasic::BroadcastButtonClicked()
 {

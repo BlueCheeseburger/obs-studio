@@ -675,6 +675,7 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 					a->setChecked(curFilter == val);
 					connect(a, &QAction::triggered, this, [source, val]() {
 						obs_source_set_output_filter(source, val);
+						OBSBasic::Get()->SaveProject();
 					});
 					return a;
 				};

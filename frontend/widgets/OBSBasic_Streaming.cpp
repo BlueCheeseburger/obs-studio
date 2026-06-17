@@ -27,8 +27,34 @@
 
 #include <qt-wrappers.hpp>
 
+#include <QStringList>
+
 #define STREAMING_START "==== Streaming Start ==============================================="
 #define STREAMING_STOP "==== Streaming Stop ================================================"
+
+/* Build a one-line status summary of what multi-streaming actually did, so the
+ * user gets real feedback instead of silent success/failure. */
+static QString BuildMultiStreamStatus(const MultiStreamStartResult &r)
+{
+	auto join = [](const std::vector<std::string> &v) {
+		QStringList list;
+		for (const auto &s : v)
+			list << QString::fromStdString(s);
+		return list.join(QStringLiteral(", "));
+	};
+
+	QStringList parts;
+	if (!r.started.empty())
+		parts << QTStr("Basic.MultiStream.Status.Streaming").arg(join(r.started));
+	if (!r.failed.empty())
+		parts << QTStr("Basic.MultiStream.Status.Failed").arg(join(r.failed));
+	if (!r.missingKey.empty())
+		parts << QTStr("Basic.MultiStream.Status.NoKey").arg(join(r.missingKey));
+	if (!r.duplicate.empty())
+		parts << QTStr("Basic.MultiStream.Status.Duplicate").arg(join(r.duplicate));
+
+	return parts.join(QStringLiteral("  •  "));
+}
 
 void OBSBasic::DisplayStreamStartError()
 {
@@ -97,12 +123,30 @@ void OBSBasic::StartStreaming()
 			return;
 		}
 
-		if (multiStreamOutput) {
+		if (multiStreamOutput && multiStreamOutput->AnyEnabled()) {
 			OBSOutputAutoRelease primaryOutput = outputHandler->StreamingOutput();
 			obs_encoder_t *videoEnc = obs_output_get_video_encoder(primaryOutput);
 			obs_encoder_t *audioEnc = obs_output_get_audio_encoder(primaryOutput, 0);
-			if (videoEnc && audioEnc)
-				multiStreamOutput->Start(videoEnc, audioEnc);
+
+			/* Identify the main stream so duplicate destinations are skipped. */
+			std::string primaryServer, primaryKey;
+			OBSDataAutoRelease svcSettings = obs_service_get_settings(service);
+			if (svcSettings) {
+				const char *s = obs_data_get_string(svcSettings, "server");
+				const char *k = obs_data_get_string(svcSettings, "key");
+				primaryServer = s ? s : "";
+				primaryKey = k ? k : "";
+			}
+
+			if (videoEnc && audioEnc) {
+				MultiStreamStartResult r =
+					multiStreamOutput->Start(videoEnc, audioEnc, primaryServer, primaryKey);
+				QString msg = BuildMultiStreamStatus(r);
+				if (!msg.isEmpty())
+					ShowStatusBarMessage(msg);
+			} else {
+				ShowStatusBarMessage(QTStr("Basic.MultiStream.Status.NoEncoder"));
+			}
 		}
 
 		if (autoStartBroadcast) {
@@ -275,6 +319,8 @@ void OBSBasic::StreamingStart()
 		youtubeAppDock->IngestionStarted();
 #endif
 
+	MaybeStartLiveThumbnailGrabber();
+
 	blog(LOG_INFO, STREAMING_START);
 }
 
@@ -355,6 +401,8 @@ void OBSBasic::StreamingStop(int code, QString last_error)
 
 	streamingStopping = false;
 	OnEvent(OBS_FRONTEND_EVENT_STREAMING_STOPPED);
+
+	StopLiveThumbnailGrabber();
 
 	OnDeactivate();
 

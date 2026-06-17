@@ -1,0 +1,151 @@
+/*****************************************************************************
+Copyright (C) 2024 by the OBS Project
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*****************************************************************************/
+
+/*
+ * Photo-editor style "Adjustments" filter. A single pass that mirrors the
+ * controls people expect from photo editing software: exposure, contrast,
+ * highlights/shadows recovery, white balance (temperature/tint), saturation,
+ * vibrance, sharpening and a vignette.
+ *
+ * Values arrive pre-scaled from the host so the shader can stay simple.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+/* Light */
+uniform float exposure;   // linear multiplier (already 2^stops)
+uniform float contrast;   // contrast factor (1.0 == no change)
+uniform float highlights; // additive amount applied to bright pixels
+uniform float shadows;    // additive amount applied to dark pixels
+
+/* Color */
+uniform float temperature; // warm (+) / cool (-)
+uniform float tint;        // green (+) / magenta (-)
+uniform float hue;         // hue rotation in radians
+uniform float saturation;  // 0 == grayscale, 1 == unchanged
+uniform float vibrance;    // smart saturation for muted pixels
+
+/* Detail */
+uniform float sharpness;   // unsharp amount
+uniform float2 texel;      // 1 / texture size, for neighbor taps
+
+/* Effects */
+uniform float vignette;    // edge darkening amount (0..1)
+
+sampler_state textureSampler {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData vert_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = vert_in.uv;
+	return vert_out;
+}
+
+float4 PSAdjustments(VertData vert_in) : TARGET
+{
+	float3 luma_weights = float3(0.299, 0.587, 0.114);
+
+	float4 pixel = image.Sample(textureSampler, vert_in.uv);
+
+	/* Sharpen on the premultiplied sample using a 4-neighbor laplacian. */
+	if (sharpness > 0.0) {
+		float3 neighbors =
+			image.Sample(textureSampler, vert_in.uv + float2(texel.x, 0.0)).rgb +
+			image.Sample(textureSampler, vert_in.uv - float2(texel.x, 0.0)).rgb +
+			image.Sample(textureSampler, vert_in.uv + float2(0.0, texel.y)).rgb +
+			image.Sample(textureSampler, vert_in.uv - float2(0.0, texel.y)).rgb;
+		pixel.rgb += (pixel.rgb * 4.0 - neighbors) * sharpness;
+	}
+
+	/* Operate on straight (un-premultiplied) color. */
+	pixel.rgb *= (pixel.a > 0.0) ? (1.0 / pixel.a) : 0.0;
+	float3 rgb = pixel.rgb;
+
+	/* Exposure. */
+	rgb *= exposure;
+
+	/* Contrast around mid-gray. */
+	rgb = (rgb - 0.5) * contrast + 0.5;
+
+	/* Highlights / shadows recovery. */
+	float lum = dot(saturate(rgb), luma_weights);
+	float shadow_mask = saturate(1.0 - lum * 2.0);
+	float highlight_mask = saturate((lum - 0.5) * 2.0);
+	rgb += shadows * shadow_mask;
+	rgb += highlights * highlight_mask;
+
+	/* White balance. */
+	rgb.r += temperature;
+	rgb.b -= temperature;
+	rgb.g += tint;
+
+	rgb = max(rgb, 0.0);
+
+	/* Hue rotation around the neutral (1,1,1) axis. */
+	if (hue != 0.0) {
+		float3 k = float3(0.57735, 0.57735, 0.57735);
+		float cosA = cos(hue);
+		rgb = rgb * cosA + cross(k, rgb) * sin(hue) + k * dot(k, rgb) * (1.0 - cosA);
+		rgb = max(rgb, 0.0);
+	}
+
+	/* Vibrance: boost saturation more for already-muted pixels. */
+	if (vibrance != 0.0) {
+		float mx = max(rgb.r, max(rgb.g, rgb.b));
+		float mn = min(rgb.r, min(rgb.g, rgb.b));
+		float sat = mx - mn;
+		float gray = dot(rgb, luma_weights);
+		rgb = lerp(float3(gray, gray, gray), rgb, 1.0 + vibrance * (1.0 - sat));
+		rgb = max(rgb, 0.0);
+	}
+
+	/* Saturation. */
+	float gray2 = dot(rgb, luma_weights);
+	rgb = lerp(float3(gray2, gray2, gray2), rgb, saturation);
+	rgb = max(rgb, 0.0);
+
+	/* Vignette. */
+	if (vignette > 0.0) {
+		float2 d = vert_in.uv - 0.5;
+		float r = length(d) * 1.41421356;
+		rgb *= 1.0 - vignette * smoothstep(0.4, 1.0, r);
+	}
+
+	/* Restore premultiplied alpha. */
+	pixel.rgb = rgb * pixel.a;
+	return pixel;
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(vert_in);
+		pixel_shader  = PSAdjustments(vert_in);
+	}
+}

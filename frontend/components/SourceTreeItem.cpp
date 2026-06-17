@@ -6,6 +6,7 @@
 #include <qt-wrappers.hpp>
 
 #include <QCheckBox>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPainter>
@@ -497,10 +498,12 @@ void SourceTreeItem::UpdateOutputFilterLabel()
 	obs_source_t *source = obs_sceneitem_get_source(sceneitem);
 	auto filter = obs_source_get_output_filter(source);
 	if (filter == OBS_SOURCE_OUTPUT_FILTER_STREAM) {
-		outputFilterLabel->setText(QStringLiteral("\xF0\x9F\x93\xBA")); // 📺
+		outputFilterLabel->setPixmap(QIcon("theme:Dark/output-stream-only.svg").pixmap(QSize(14, 14)));
+		outputFilterLabel->setToolTip(QTStr("OutputFilter.StreamOnly"));
 		outputFilterLabel->setVisible(true);
 	} else if (filter == OBS_SOURCE_OUTPUT_FILTER_RECORD) {
-		outputFilterLabel->setText(QStringLiteral("\xE2\x97\x89")); // ◉
+		outputFilterLabel->setPixmap(QIcon("theme:Dark/output-record-only.svg").pixmap(QSize(14, 14)));
+		outputFilterLabel->setToolTip(QTStr("OutputFilter.RecordOnly"));
 		outputFilterLabel->setVisible(true);
 	} else {
 		outputFilterLabel->setVisible(false);

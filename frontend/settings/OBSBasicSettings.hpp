@@ -28,6 +28,7 @@
 #define VOLUME_METER_DECAY_MEDIUM 11.76
 #define VOLUME_METER_DECAY_SLOW 8.57
 
+class QCheckBox;
 class Auth;
 class OBSBasic;
 class OBSHotkeyWidget;
@@ -57,6 +58,8 @@ private:
 	std::unique_ptr<Ui::OBSBasicSettings> ui;
 
 	std::shared_ptr<Auth> auth;
+
+	QCheckBox *autoThumbnailEnable = nullptr;
 
 	bool generalChanged = false;
 	bool stream1Changed = false;

@@ -9,6 +9,15 @@
     <file>images/headphones-off.svg</file>
     <file>images/trash.svg</file>
     <file>images/filter.svg</file>
+    <file>images/filters/adjust.svg</file>
+    <file>images/filters/color.svg</file>
+    <file>images/filters/key.svg</file>
+    <file>images/filters/stylize.svg</file>
+    <file>images/filters/transform.svg</file>
+    <file>images/filters/audio.svg</file>
+    <file>images/filters/utility.svg</file>
+    <file>images/filters/more.svg</file>
+    <file>images/filters/fullscreen.svg</file>
     <file>images/mute.svg</file>
     <file>images/unassigned.svg</file>
     <file>images/refresh.svg</file>

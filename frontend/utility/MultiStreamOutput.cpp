@@ -5,6 +5,8 @@
 #include <obs.h>
 #include <util/config-file.h>
 
+#include <algorithm>
+
 const char *const MultiStreamOutput::PLATFORM_NAMES[MAX_DESTINATIONS] = {"YouTube", "Twitch", "TikTok"};
 
 const char *const MultiStreamOutput::CONFIG_SECTIONS[MAX_DESTINATIONS] = {"MultiStreamYouTube", "MultiStreamTwitch",
@@ -86,31 +88,69 @@ bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encod
 	return true;
 }
 
-bool MultiStreamOutput::Start(obs_encoder_t *videoEncoder, obs_encoder_t *audioEncoder)
+MultiStreamStartResult MultiStreamOutput::Start(obs_encoder_t *videoEncoder, obs_encoder_t *audioEncoder,
+						const std::string &primaryServer, const std::string &primaryKey)
 {
 	LoadConfig();
 
-	bool anyStarted = false;
+	MultiStreamStartResult result;
+
+	/* Track stream keys already in use so the same destination is never
+	 * started twice — this is what prevents "streaming to YouTube twice"
+	 * when YouTube is also the main service. */
+	std::vector<std::string> usedKeys;
+	if (!primaryKey.empty())
+		usedKeys.push_back(primaryKey);
+
 	for (auto &dest : destinations) {
-		if (dest.enabled) {
-			bool ok = StartDestination(dest, videoEncoder, audioEncoder);
-			anyStarted = anyStarted || ok;
+		/* Release any output left over from a previous session before
+		 * deciding what to do this time. obs_output_stop() is async, so
+		 * the old object may have lingered after the last Stop(); by the
+		 * time the user starts again it has finished and is safe to free.
+		 */
+		dest.output = nullptr;
+		dest.service = nullptr;
+
+		if (!dest.enabled)
+			continue;
+
+		if (dest.key.empty()) {
+			result.missingKey.push_back(dest.name);
+			continue;
+		}
+
+		bool duplicate = std::find(usedKeys.begin(), usedKeys.end(), dest.key) != usedKeys.end();
+		if (duplicate) {
+			blog(LOG_INFO, "MultiStream: Skipping %s (same stream key as another destination)",
+			     dest.name.c_str());
+			result.duplicate.push_back(dest.name);
+			continue;
+		}
+
+		if (StartDestination(dest, videoEncoder, audioEncoder)) {
+			result.started.push_back(dest.name);
+			usedKeys.push_back(dest.key);
+		} else {
+			result.failed.push_back(dest.name);
 		}
 	}
-	return anyStarted;
+
+	return result;
 }
 
 void MultiStreamOutput::Stop(bool force)
 {
+	/* Signal each output to stop but keep our reference alive.
+	 * obs_output_stop() is asynchronous; releasing the output here would
+	 * tear it down mid-shutdown and cut the final packets. The references
+	 * are released on the next Start() (or when this object is destroyed). */
 	for (auto &dest : destinations) {
 		if (dest.output) {
 			if (force)
 				obs_output_force_stop(dest.output);
 			else
 				obs_output_stop(dest.output);
-			dest.output = nullptr;
 		}
-		dest.service = nullptr;
 	}
 }
 
@@ -118,6 +158,16 @@ bool MultiStreamOutput::AnyActive() const
 {
 	for (const auto &dest : destinations) {
 		if (dest.output && obs_output_active(dest.output))
+			return true;
+	}
+	return false;
+}
+
+bool MultiStreamOutput::AnyEnabled()
+{
+	LoadConfig();
+	for (const auto &dest : destinations) {
+		if (dest.enabled)
 			return true;
 	}
 	return false;

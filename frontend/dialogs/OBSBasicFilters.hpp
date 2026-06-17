@@ -20,9 +20,12 @@
 #include "ui_OBSBasicFilters.h"
 
 #include <QDialog>
+#include <QPointer>
+#include <QRect>
 
 class OBSBasic;
 class OBSPropertiesView;
+class QListWidget;
 
 class OBSBasicFilters : public QDialog {
 	Q_OBJECT
@@ -53,6 +56,17 @@ private:
 	static void DrawPreview(void *data, uint32_t cx, uint32_t cy);
 
 	QMenu *CreateAddFilterPopupMenu(bool async);
+
+	void PopulateAddPalette(QListWidget *list, bool async);
+	void SetupAddPalettes();
+	void UpdateListVisibility();
+
+	QListWidget *asyncAddList = nullptr;
+	QListWidget *effectAddList = nullptr;
+
+	QPointer<QWidget> fullscreenPreview;
+	QPointer<QWidget> fsCloseBtn;
+	QRect preFullscreenGeometry;
 
 	void AddNewFilter(const char *id);
 	void ReorderFilter(QListWidget *list, obs_source_t *filter, size_t idx);
@@ -104,6 +118,8 @@ private slots:
 	void CopyFilter();
 	void PasteFilter();
 
+	void ToggleFullscreenPreview();
+
 	void FiltersMoved(const QModelIndex &srcParent, int srcIdxStart, int srcIdxEnd, const QModelIndex &dstParent,
 			  int dstIdx);
 
@@ -122,4 +138,5 @@ public:
 protected:
 	virtual void closeEvent(QCloseEvent *event) override;
 	virtual bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+	virtual void keyPressEvent(QKeyEvent *event) override;
 };

@@ -1629,7 +1629,8 @@ QSlider::handle:disabled {
 /* Volume Control Buttons */
 
 .btn-mute,
-.btn-monitor {
+.btn-monitor,
+.btn-noise-suppress {
     width: var(--icon_small);
     height: var(--icon_small);
     background-color: transparent;
@@ -1641,19 +1642,22 @@ QSlider::handle:disabled {
 }
 
 .btn-mute:checked,
-.btn-monitor:checked {
+.btn-monitor:checked,
+.btn-noise-suppress:checked {
     background-color: transparent;
     border-color: transparent;
 }
 
 .btn-mute:hover,
-.btn-monitor:hover {
+.btn-monitor:hover,
+.btn-noise-suppress:hover {
     background-color: var(--button_bg_hover);
     border-color: transparent;
 }
 
 .btn-mute:pressed,
-.btn-monitor:pressed {
+.btn-monitor:pressed,
+.btn-noise-suppress:pressed {
     background-color: var(--button_bg_down);
 }
 
@@ -1715,6 +1719,31 @@ QSlider::handle:disabled {
 }
 
 .btn-monitor.checked:hover {
+    background: var(--green3);
+    border-color: var(--green1);
+    color: var(--text_light);
+}
+
+/* Noise Suppression Button */
+
+.btn-noise-suppress {
+    background: transparent;
+    color: var(--text);
+    qproperty-icon: url(theme:Dark/noise-suppress.svg);
+}
+
+.btn-noise-suppress:focus {
+    border-color: var(--green1);
+}
+
+.btn-noise-suppress.checked {
+    background: var(--green4);
+    color: var(--text_light);
+    qproperty-icon: url(theme:Dark/noise-suppress.svg);
+}
+
+.btn-noise-suppress.checked:focus,
+.btn-noise-suppress.checked:hover {
     background: var(--green3);
     border-color: var(--green1);
     color: var(--text_light);
@@ -2157,10 +2186,11 @@ OBSBasic {
 
 /* Scene list - compact list items */
 
-#scenes::item {
-    padding-top: 4px;
-    padding-bottom: 4px;
-    min-height: 0;
+SceneTree::item {
+    padding-top: 3px;
+    padding-bottom: 3px;
+    min-height: 0px;
+    max-height: 22px;
 }
 
 /* Scene Tree Grid Mode */

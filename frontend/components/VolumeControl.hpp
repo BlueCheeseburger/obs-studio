@@ -81,6 +81,7 @@ private:
 	VolumeSlider *slider;
 	QPushButton *muteButton;
 	QPushButton *monitorButton;
+	QPushButton *noiseSupprButton{nullptr};
 	QLabel *audioFilterLabel{nullptr};
 
 	OBSFader obs_fader;
@@ -104,6 +105,7 @@ private:
 	static void obsSourceActivated(void *data, calldata_t *params);
 	static void obsSourceDeactivated(void *data, calldata_t *params);
 	static void obsSourceDestroy(void *data, calldata_t *params);
+	static void obsFilterChanged(void *data, calldata_t *params);
 
 	void setLayoutVertical(bool vertical);
 	void showVolumeControlMenu(QPoint pos = QPoint(0, 0));
@@ -123,6 +125,8 @@ private slots:
 	void renameSource();
 	void changeVolume();
 	void updateAudioOutputFilter();
+	void toggleNoiseSuppr();
+	void updateNoiseSupprButton();
 
 	void handleMuteButton(bool checked);
 	void handleMonitorButton(bool checked);

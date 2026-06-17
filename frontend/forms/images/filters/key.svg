@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="16px" viewBox="0 0 16 16" width="16px" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 2 a4 4 0 1 0 0 8 a4 4 0 1 0 0 -8 z M6 4 a2 2 0 1 0 0 4 a2 2 0 1 0 0 -4 z" fill="#4cd964" fill-rule="evenodd"/>
+    <g fill="#4cd964">
+        <rect x="9.5" y="5.25" width="5.5" height="1.6"/>
+        <rect x="13.4" y="6.85" width="1.6" height="2.1"/>
+    </g>
+</svg>
