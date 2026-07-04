@@ -620,6 +620,7 @@ private slots:
 
 	void on_actionFullscreenInterface_triggered();
 	void on_actionRemux_triggered();
+	void on_actionRecordOnStartup_toggled(bool checked);
 	void on_action_Settings_triggered();
 	void on_actionShowMacPermissions_triggered();
 	void on_actionShowLogs_triggered();
@@ -1028,6 +1029,12 @@ public slots:
 	void CheckDiskSpaceRemaining();
 
 	bool RecordingActive();
+
+	/* Windows taskbar thumbnail toolbar (record/pause buttons). No-ops on
+	 * other platforms. Triggered from the native event filter. */
+	void UpdateTaskbarButtons();
+	void TriggerRecordButton();
+	void TriggerStopButton();
 
 	/* Safety net: warns if an audible audio source can't reach any track the
 	 * recording is actually encoding (e.g. it was excluded from the mixer

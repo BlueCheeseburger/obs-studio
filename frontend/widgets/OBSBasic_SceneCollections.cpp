@@ -1459,8 +1459,9 @@ retryScene:
 		opt_start_streaming = false;
 	}
 
-	if (opt_start_recording && !safe_mode) {
-		blog(LOG_INFO, "Starting recording due to command line parameter");
+	bool recordOnStartup = config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup");
+	if ((opt_start_recording || recordOnStartup) && !safe_mode) {
+		blog(LOG_INFO, "Starting recording on startup");
 		QMetaObject::invokeMethod(this, "StartRecording", Qt::QueuedConnection);
 		opt_start_recording = false;
 	}

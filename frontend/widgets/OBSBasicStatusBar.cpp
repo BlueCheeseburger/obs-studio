@@ -4,6 +4,7 @@
 #include <widgets/OBSBasic.hpp>
 
 #include <QDesktopServices>
+#include <QDir>
 #include <QFileInfo>
 #include <QLabel>
 #include <QProcess>
@@ -11,6 +12,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shlobj.h>
+#include <shobjidl.h>
 #endif
 
 #include "moc_OBSBasicStatusBar.cpp"
@@ -57,8 +60,10 @@ OBSBasicStatusBar::OBSBasicStatusBar(QWidget *parent)
 	connect(messageTimer, &QTimer::timeout, this, &OBSBasicStatusBar::clearMessage);
 
 	statusWidget->ui->message->setOpenExternalLinks(false);
-	connect(statusWidget->ui->message, &QLabel::linkActivated, this, &OBSBasicStatusBar::onCapCutLinkActivated);
-	connect(statusWidget->ui->message, &QLabel::linkHovered, this, &OBSBasicStatusBar::onCapCutLinkHovered);
+	connect(statusWidget->ui->message, &QLabel::linkActivated, this,
+		&OBSBasicStatusBar::onOpenRecordingLinkActivated);
+	connect(statusWidget->ui->message, &QLabel::linkHovered, this,
+		&OBSBasicStatusBar::onOpenRecordingLinkHovered);
 
 	clearMessage();
 }
@@ -591,7 +596,7 @@ void OBSBasicStatusBar::UpdateIcons()
 void OBSBasicStatusBar::showMessage(const QString &message, int timeout)
 {
 	messageTimer->stop();
-	capCutFilePath.clear();
+	savedRecordingPath.clear();
 
 	statusWidget->ui->message->setTextFormat(Qt::PlainText);
 	statusWidget->ui->message->setText(message);
@@ -602,24 +607,24 @@ void OBSBasicStatusBar::showMessage(const QString &message, int timeout)
 
 void OBSBasicStatusBar::clearMessage()
 {
-	capCutFilePath.clear();
+	savedRecordingPath.clear();
 	statusWidget->ui->message->setTextFormat(Qt::PlainText);
 	statusWidget->ui->message->setText("");
 }
 
-static QString capCutLinkHtml(const QString &label, bool underline)
+static QString openRecordingLinkHtml(const QString &label, bool underline)
 {
 	QString deco = underline ? "underline" : "none";
-	return QString("<a href='capcut://open' style='color: white; text-decoration: %1;'>%2</a>")
+	return QString("<a href='mediaplayer://open' style='color: white; text-decoration: %1;'>%2</a>")
 		.arg(deco, label.toHtmlEscaped());
 }
 
 void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
 {
-	capCutFilePath = filePath;
-	capCutMessageBase = QTStr("Basic.StatusBar.RecordingSavedTo").arg(filePath.toHtmlEscaped());
+	savedRecordingPath = filePath;
+	savedMessageBase = QTStr("Basic.StatusBar.RecordingSavedTo").arg(filePath.toHtmlEscaped());
 
-	QString html = capCutMessageBase + " &nbsp;" + capCutLinkHtml(QTStr("Basic.StatusBar.OpenInCapCut"), false);
+	QString html = savedMessageBase + " &nbsp;" + openRecordingLinkHtml(QTStr("Basic.StatusBar.OpenInMediaPlayer"), false);
 
 	messageTimer->stop();
 	statusWidget->ui->message->setTextFormat(Qt::RichText);
@@ -627,46 +632,72 @@ void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
 	messageTimer->start(30000);
 }
 
-void OBSBasicStatusBar::onCapCutLinkHovered(const QString &link)
+void OBSBasicStatusBar::onOpenRecordingLinkHovered(const QString &link)
 {
-	if (capCutFilePath.isEmpty())
+	if (savedRecordingPath.isEmpty())
 		return;
 
 	bool hovering = !link.isEmpty();
-	QString html = capCutMessageBase + " &nbsp;" + capCutLinkHtml(QTStr("Basic.StatusBar.OpenInCapCut"), hovering);
+	QString html = savedMessageBase + " &nbsp;" +
+		       openRecordingLinkHtml(QTStr("Basic.StatusBar.OpenInMediaPlayer"), hovering);
 	statusWidget->ui->message->setText(html);
 }
 
-void OBSBasicStatusBar::onCapCutLinkActivated(const QString &)
-{
-	if (capCutFilePath.isEmpty())
-		return;
-
-	QFileInfo fi(capCutFilePath);
-	QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
-
 #ifdef _WIN32
-	QStringList paths;
+/* Opens a file in the modern Windows "Media Player" packaged app via
+ * IApplicationActivationManager. Returns false if the app couldn't be
+ * activated so the caller can fall back. */
+static bool OpenInWindowsMediaPlayer(const QString &filePath)
+{
+	const wchar_t *aumid = L"Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic";
+	std::wstring path = filePath.toStdWString();
 
-	QString localAppData = QString::fromLocal8Bit(qgetenv("LOCALAPPDATA"));
-	if (!localAppData.isEmpty())
-		paths << localAppData + "\\CapCut\\Apps\\CapCut.exe";
+	IShellItem *item = nullptr;
+	HRESULT hr = SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item));
+	if (FAILED(hr) || !item)
+		return false;
 
-	QString programFiles = QString::fromLocal8Bit(qgetenv("ProgramFiles"));
-	if (!programFiles.isEmpty())
-		paths << programFiles + "\\CapCut\\CapCut.exe";
+	IShellItemArray *itemArray = nullptr;
+	hr = SHCreateShellItemArrayFromShellItem(item, IID_PPV_ARGS(&itemArray));
+	item->Release();
+	if (FAILED(hr) || !itemArray)
+		return false;
 
-	QString programFilesX86 = QString::fromLocal8Bit(qgetenv("ProgramFiles(x86)"));
-	if (!programFilesX86.isEmpty())
-		paths << programFilesX86 + "\\CapCut\\CapCut.exe";
-
-	for (const QString &path : paths) {
-		if (QFileInfo::exists(path)) {
-			QProcess::startDetached(path, {});
-			return;
-		}
+	IApplicationActivationManager *manager = nullptr;
+	hr = CoCreateInstance(CLSID_ApplicationActivationManager, nullptr, CLSCTX_INPROC_SERVER,
+			      IID_PPV_ARGS(&manager));
+	if (SUCCEEDED(hr) && manager) {
+		DWORD pid = 0;
+		hr = manager->ActivateForFile(aumid, itemArray, L"Open", &pid);
+		manager->Release();
 	}
 
-	ShellExecuteW(nullptr, L"open", L"CapCut.exe", nullptr, nullptr, SW_SHOWDEFAULT);
+	itemArray->Release();
+	return SUCCEEDED(hr);
+}
+#endif
+
+void OBSBasicStatusBar::onOpenRecordingLinkActivated(const QString &)
+{
+	if (savedRecordingPath.isEmpty())
+		return;
+
+#ifdef _WIN32
+	QString nativePath = QDir::toNativeSeparators(savedRecordingPath);
+
+	if (OpenInWindowsMediaPlayer(nativePath))
+		return;
+
+	/* Fall back to Windows Media Player Legacy, which reliably opens a
+	 * specific file and is always present on Windows. */
+	std::wstring quoted = L"\"" + nativePath.toStdWString() + L"\"";
+	HINSTANCE res = ShellExecuteW(nullptr, L"open", L"wmplayer.exe", quoted.c_str(), nullptr, SW_SHOWNORMAL);
+	if ((INT_PTR)res > 32)
+		return;
+
+	/* Last resort: let the shell open the file with the default player. */
+	QDesktopServices::openUrl(QUrl::fromLocalFile(savedRecordingPath));
+#else
+	QDesktopServices::openUrl(QUrl::fromLocalFile(savedRecordingPath));
 #endif
 }

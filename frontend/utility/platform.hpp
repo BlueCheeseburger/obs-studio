@@ -47,6 +47,23 @@ void TaskbarOverlayInit();
 void TaskbarOverlaySetStatus(TaskbarOverlayStatus status);
 
 #ifdef _WIN32
+/* Windows taskbar thumbnail toolbar: Start and Stop recording buttons shown
+ * on the taskbar live-preview popup, like media players. */
+enum TaskbarThumbButton {
+	TaskbarThumbRecord = 0xF101,
+	TaskbarThumbStop = 0xF102,
+};
+
+/* Registered "TaskbarButtonCreated" message; the native event filter listens
+ * for it to (re)add the thumb buttons once the taskbar button exists. */
+unsigned int GetTaskbarButtonCreatedMsg();
+
+/* Adds (first call after the taskbar button exists) or updates the thumb
+ * buttons to reflect the current recording state. */
+void TaskbarButtonsSetState(bool recording);
+#endif
+
+#ifdef _WIN32
 class RunOnceMutex;
 RunOnceMutex
 #else
