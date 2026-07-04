@@ -674,8 +674,23 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 					a->setCheckable(true);
 					a->setChecked(curFilter == val);
 					connect(a, &QAction::triggered, this, [source, val]() {
+						OBSBasic *main = OBSBasic::Get();
 						obs_source_set_output_filter(source, val);
-						OBSBasic::Get()->SaveProject();
+						main->SaveProject();
+
+						/* The dedicated stream/record mixes are only
+						 * created while at least one source is
+						 * filtered. Rebuild the output handler (no-op
+						 * while outputs are active) so the mixes match
+						 * the new filter state; if an output is
+						 * running, the change applies once it
+						 * restarts. */
+						if (main->Active()) {
+							main->ShowStatusBarMessage(
+								QTStr("OutputFilter.AppliesAfterRestart"));
+						} else {
+							main->ResetOutputs();
+						}
 					});
 					return a;
 				};

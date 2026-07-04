@@ -984,6 +984,9 @@ EXPORT video_t *obs_add_output_filtered_mix(uint32_t render_output_filter);
 /** Removes a previously added filtered video mix by its video handle. */
 EXPORT void obs_remove_video_mix(video_t *video);
 
+/** Number of sources currently carrying a non-default output filter. */
+EXPORT long obs_output_filtered_source_count(void);
+
 /** Removes a view from the main render loop */
 EXPORT void obs_view_remove(obs_view_t *view);
 
