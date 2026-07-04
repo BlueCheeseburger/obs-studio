@@ -23,6 +23,9 @@
 #include <util/windows/WinHandle.hpp>
 #include <util/windows/win-version.h>
 
+#include <QPainter>
+#include <QPixmap>
+
 #include <Dwmapi.h>
 #include <audiopolicy.h>
 #include <mmdeviceapi.h>
@@ -410,6 +413,111 @@ void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
 	taskbarIcon->SetOverlayIcon(hwnd, hicon, nullptr);
 	DestroyIcon(hicon);
 	taskbarIcon->Release();
+}
+
+/* ------------------------------------------------------------------------- */
+/* Taskbar thumbnail toolbar (record/pause buttons on the taskbar preview)   */
+
+unsigned int GetTaskbarButtonCreatedMsg()
+{
+	static const UINT msg = RegisterWindowMessageW(L"TaskbarButtonCreated");
+	return msg;
+}
+
+/* The shipped record/pause SVGs are solid black, which is invisible on the
+ * taskbar, so the glyphs are drawn here with explicit, theme-independent
+ * colors. Icons are built once and cached for the lifetime of the process. */
+static HICON MakeThumbIcon(void (*draw)(QPainter &, int))
+{
+	int sz = GetSystemMetrics(SM_CXSMICON);
+	if (sz <= 0)
+		sz = 16;
+
+	QPixmap pm(sz, sz);
+	pm.fill(Qt::transparent);
+
+	QPainter p(&pm);
+	p.setRenderHint(QPainter::Antialiasing, true);
+	p.setPen(Qt::NoPen);
+	draw(p, sz);
+	p.end();
+
+	Q_GUI_EXPORT HICON qt_pixmapToWinHICON(const QPixmap &p);
+	return qt_pixmapToWinHICON(pm);
+}
+
+static void DrawRecordGlyph(QPainter &p, int sz)
+{
+	qreal inset = sz * 0.18;
+	p.setBrush(QColor(0xE0, 0x3A, 0x3A));
+	p.drawEllipse(QRectF(inset, inset, sz - inset * 2, sz - inset * 2));
+}
+
+static void DrawStopGlyph(QPainter &p, int sz)
+{
+	qreal inset = sz * 0.22;
+	p.setBrush(QColor(0xF0, 0xF0, 0xF0));
+	p.drawRoundedRect(QRectF(inset, inset, sz - inset * 2, sz - inset * 2), sz * 0.1, sz * 0.1);
+}
+
+static void SetThumbTip(THUMBBUTTON &btn, const QString &text)
+{
+	btn.dwMask = (THUMBBUTTONMASK)(btn.dwMask | THB_TOOLTIP);
+	int len = text.left((int)ARRAYSIZE(btn.szTip) - 1).toWCharArray(btn.szTip);
+	btn.szTip[len] = L'\0';
+}
+
+static ComPtr<ITaskbarList3> thumbBarList;
+static bool thumbButtonsAdded = false;
+
+void TaskbarButtonsSetState(bool recording)
+{
+	if (!hwnd)
+		return;
+
+	static HICON iconRecord = MakeThumbIcon(DrawRecordGlyph);
+	static HICON iconStop = MakeThumbIcon(DrawStopGlyph);
+
+	if (!thumbBarList) {
+		auto hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER,
+					   IID_PPV_ARGS(&thumbBarList));
+		if (FAILED(hr)) {
+			thumbBarList = nullptr;
+			return;
+		}
+
+		hr = thumbBarList->HrInit();
+		if (FAILED(hr)) {
+			thumbBarList = nullptr;
+			return;
+		}
+	}
+
+	THUMBBUTTON buttons[2] = {};
+
+	/* Start Recording: enabled only while not recording. */
+	buttons[0].dwMask = (THUMBBUTTONMASK)(THB_ICON | THB_FLAGS);
+	buttons[0].iId = TaskbarThumbRecord;
+	buttons[0].hIcon = iconRecord;
+	buttons[0].dwFlags = recording ? THBF_DISABLED : THBF_ENABLED;
+	SetThumbTip(buttons[0], QTStr("Basic.Main.StartRecording"));
+
+	/* Stop Recording: enabled only while recording. */
+	buttons[1].dwMask = (THUMBBUTTONMASK)(THB_ICON | THB_FLAGS);
+	buttons[1].iId = TaskbarThumbStop;
+	buttons[1].hIcon = iconStop;
+	buttons[1].dwFlags = recording ? THBF_ENABLED : THBF_DISABLED;
+	SetThumbTip(buttons[1], QTStr("Basic.Main.StopRecording"));
+
+	if (!thumbButtonsAdded) {
+		/* ThumbBarAddButtons only succeeds once the taskbar button has
+		 * been created; until then it fails and we retry on the next
+		 * state change or TaskbarButtonCreated message. */
+		if (SUCCEEDED(thumbBarList->ThumbBarAddButtons(hwnd, ARRAYSIZE(buttons), buttons)))
+			thumbButtonsAdded = true;
+	} else {
+		thumbBarList->ThumbBarUpdateButtons(hwnd, ARRAYSIZE(buttons), buttons);
+	}
 }
 
 bool HighContrastEnabled()

@@ -1179,6 +1179,9 @@ void OBSBasic::OBSInit()
 		ui->actionAlwaysOnTop->setVisible(false);
 	}
 
+	ui->actionRecordOnStartup->setChecked(
+		config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup"));
+
 #ifndef _WIN32
 	if (!hideWindowOnStart)
 		show();
@@ -1253,6 +1256,7 @@ void OBSBasic::OBSInit()
 	SystemTray(true);
 
 	TaskbarOverlayInit();
+	UpdateTaskbarButtons();
 
 #ifdef __APPLE__
 	disableColorSpaceConversion(this);

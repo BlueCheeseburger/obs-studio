@@ -463,6 +463,12 @@ void OBSBasic::on_actionShowProfileFolder_triggered()
 	}
 }
 
+void OBSBasic::on_actionRecordOnStartup_toggled(bool checked)
+{
+	config_set_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup", checked);
+	config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
+}
+
 void OBSBasic::on_actionAlwaysOnTop_triggered()
 {
 #ifndef _WIN32

@@ -16,12 +16,18 @@
 ******************************************************************************/
 
 #include "NativeEventFilter.hpp"
+#include "platform.hpp"
 
 #include <widgets/OBSBasic.hpp>
 
 #include <sstream>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <commctrl.h>
+
+#ifndef THBN_CLICKED
+#define THBN_CLICKED 0x1800
+#endif
 
 namespace OBS {
 
@@ -35,7 +41,25 @@ bool NativeEventFilter::nativeEventFilter(const QByteArray &eventType, void *mes
 			return false;
 		}
 
+		/* The taskbar button was (re)created; (re)add the thumb buttons. */
+		if (msg->message == GetTaskbarButtonCreatedMsg()) {
+			main->UpdateTaskbarButtons();
+			return false;
+		}
+
 		switch (msg->message) {
+		case WM_COMMAND:
+			if (HIWORD(msg->wParam) == THBN_CLICKED) {
+				switch (LOWORD(msg->wParam)) {
+				case TaskbarThumbRecord:
+					main->TriggerRecordButton();
+					return true;
+				case TaskbarThumbStop:
+					main->TriggerStopButton();
+					return true;
+				}
+			}
+			break;
 		case WM_QUERYENDSESSION:
 			main->saveAll();
 			if (msg->lParam == ENDSESSION_CRITICAL) {

@@ -724,6 +724,8 @@
     <addaction name="actionShow_Recordings"/>
     <addaction name="actionRemux"/>
     <addaction name="separator"/>
+    <addaction name="actionRecordOnStartup"/>
+    <addaction name="separator"/>
     <addaction name="action_Settings"/>
     <addaction name="actionShowSettingsFolder"/>
     <addaction name="actionShowProfileFolder"/>
@@ -1966,6 +1968,14 @@
    </property>
    <property name="text">
     <string>Basic.MainMenu.View.AlwaysOnTop</string>
+   </property>
+  </action>
+  <action name="actionRecordOnStartup">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Basic.MainMenu.File.RecordOnStartup</string>
    </property>
   </action>
   <action name="toggleListboxToolbars">

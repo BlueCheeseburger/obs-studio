@@ -237,6 +237,7 @@ void OBSBasic::RecordingStart()
 		sysTrayRecord->setText(QTStr("Basic.Main.StopRecording"));
 
 	recordingStopping = false;
+	UpdateTaskbarButtons();
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTED);
 
 	if (!diskFullTimer->isActive())
@@ -254,6 +255,8 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 
 	if (sysTrayRecord)
 		sysTrayRecord->setText(QTStr("Basic.Main.StartRecording"));
+
+	UpdateTaskbarButtons();
 
 	blog(LOG_INFO, RECORDING_STOP);
 
@@ -342,6 +345,23 @@ bool OBSBasic::RecordingActive()
 	if (!outputHandler)
 		return false;
 	return outputHandler->RecordingActive();
+}
+
+void OBSBasic::UpdateTaskbarButtons()
+{
+#ifdef _WIN32
+	TaskbarButtonsSetState(RecordingActive());
+#endif
+}
+
+void OBSBasic::TriggerRecordButton()
+{
+	RecordActionTriggered();
+}
+
+void OBSBasic::TriggerStopButton()
+{
+	RecordActionTriggered();
 }
 
 void OBSBasic::PauseRecording()

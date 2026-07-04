@@ -340,6 +340,8 @@ void OBSApp::InitUserConfigDefaults()
 
 	config_set_default_bool(userConfig, "BasicWindow", "MediaControlsCountdownTimer", true);
 
+	config_set_default_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup", true);
+
 	config_set_default_bool(App()->GetUserConfig(), "BasicWindow", "MixerShowInactive", false);
 	config_set_default_bool(App()->GetUserConfig(), "BasicWindow", "MixerKeepInactiveLast", false);
 	config_set_default_bool(App()->GetUserConfig(), "BasicWindow", "MixerShowHidden", false);
