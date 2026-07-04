@@ -1182,6 +1182,15 @@ void OBSBasic::OBSInit()
 	ui->actionRecordOnStartup->setChecked(
 		config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup"));
 
+#ifdef _WIN32
+	{
+		QSignalBlocker block(ui->actionLaunchAtLogin);
+		ui->actionLaunchAtLogin->setChecked(IsLaunchAtLoginEnabled());
+	}
+#else
+	ui->actionLaunchAtLogin->setVisible(false);
+#endif
+
 #ifndef _WIN32
 	if (!hideWindowOnStart)
 		show();

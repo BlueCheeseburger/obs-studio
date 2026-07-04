@@ -725,6 +725,7 @@
     <addaction name="actionRemux"/>
     <addaction name="separator"/>
     <addaction name="actionRecordOnStartup"/>
+    <addaction name="actionLaunchAtLogin"/>
     <addaction name="separator"/>
     <addaction name="action_Settings"/>
     <addaction name="actionShowSettingsFolder"/>
@@ -1976,6 +1977,14 @@
    </property>
    <property name="text">
     <string>Basic.MainMenu.File.RecordOnStartup</string>
+   </property>
+  </action>
+  <action name="actionLaunchAtLogin">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Basic.MainMenu.File.LaunchAtLogin</string>
    </property>
   </action>
   <action name="toggleListboxToolbars">

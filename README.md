@@ -34,10 +34,17 @@ using OBS as a startup/kiosk app.
 - Fires right after the scene collection loads (outputs ready), and is skipped in
   Safe Mode.
 
-> **Note:** If OBS is configured to *Run as administrator*, Windows cannot silently
-> auto-launch it from the Startup Apps list. To combine "run at login" with
-> "auto-record," either remove the admin requirement, or create a Task Scheduler task
-> with **Run with highest privileges**.
+### Launch OBS at login (elevated)
+**File → Launch OBS at Login (Elevated)** registers a Windows Scheduled Task that
+starts OBS automatically at logon **with administrator rights and no UAC prompt** —
+the only sanctioned way to auto-launch an elevated app at login (the normal Startup
+Apps list and `shell:startup` folder silently refuse elevated programs).
+
+The task points at the current OBS executable, runs with highest privileges, and fires
+a few seconds after logon. Combined with *Start Recording on Startup*, this gives a
+hands-off "boot → OBS runs elevated → recording begins" pipeline. Toggling it on
+requires OBS to currently be running as administrator (so it has permission to create
+the task); un-checking removes the task.
 
 ### "Open in Media Player" link
 When a recording is saved, the status bar shows an **Open in Media Player** link that

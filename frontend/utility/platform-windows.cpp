@@ -34,6 +34,9 @@
 #include <sstream>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <comdef.h>
+#include <taskschd.h>
+#pragma comment(lib, "taskschd.lib")
 
 using namespace std;
 
@@ -529,6 +532,165 @@ void TaskbarButtonsSetState(bool recording, int elapsedSeconds)
 	} else {
 		thumbBarList->ThumbBarUpdateButtons(hwnd, ARRAYSIZE(buttons), buttons);
 	}
+}
+
+/* ------------------------------------------------------------------------- */
+/* "Launch OBS at login (elevated)" via a Windows Scheduled Task              */
+
+static const wchar_t *kLaunchTaskName = L"OBS Studio Elevated Auto-Launch";
+
+static std::wstring GetCurrentUserSam()
+{
+	wchar_t domain[256] = {};
+	wchar_t user[256] = {};
+	DWORD dlen = GetEnvironmentVariableW(L"USERDOMAIN", domain, _countof(domain));
+	DWORD ulen = GetEnvironmentVariableW(L"USERNAME", user, _countof(user));
+
+	if (dlen && ulen)
+		return std::wstring(domain) + L"\\" + user;
+	if (ulen)
+		return std::wstring(user);
+	return std::wstring();
+}
+
+static std::string HrToMessage(const char *what, HRESULT hr)
+{
+	std::ostringstream ss;
+	ss << what << " (0x" << std::hex << (unsigned)hr << ")";
+	return ss.str();
+}
+
+static bool ConnectTaskFolder(ComPtr<ITaskService> &service, ComPtr<ITaskFolder> &folder)
+{
+	HRESULT hr = CoCreateInstance(CLSID_TaskScheduler, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&service));
+	if (FAILED(hr))
+		return false;
+
+	hr = service->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
+	if (FAILED(hr))
+		return false;
+
+	hr = service->GetFolder(_bstr_t(L"\\"), &folder);
+	return SUCCEEDED(hr);
+}
+
+bool IsLaunchAtLoginEnabled()
+{
+	ComPtr<ITaskService> service;
+	ComPtr<ITaskFolder> folder;
+	if (!ConnectTaskFolder(service, folder))
+		return false;
+
+	ComPtr<IRegisteredTask> task;
+	HRESULT hr = folder->GetTask(_bstr_t(kLaunchTaskName), &task);
+	if (FAILED(hr) || !task)
+		return false;
+
+	VARIANT_BOOL enabled = VARIANT_FALSE;
+	task->get_Enabled(&enabled);
+	return enabled != VARIANT_FALSE;
+}
+
+bool SetLaunchAtLogin(bool enable, std::string &error)
+{
+	ComPtr<ITaskService> service;
+	ComPtr<ITaskFolder> folder;
+	if (!ConnectTaskFolder(service, folder)) {
+		error = "Could not connect to the Task Scheduler service.";
+		return false;
+	}
+
+	if (!enable) {
+		HRESULT hr = folder->DeleteTask(_bstr_t(kLaunchTaskName), 0);
+		if (FAILED(hr) && hr != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+			error = HrToMessage("Failed to remove the scheduled task", hr);
+			return false;
+		}
+		return true;
+	}
+
+	ComPtr<ITaskDefinition> task;
+	HRESULT hr = service->NewTask(0, &task);
+	if (FAILED(hr)) {
+		error = HrToMessage("NewTask failed", hr);
+		return false;
+	}
+
+	const std::wstring user = GetCurrentUserSam();
+
+	ComPtr<IRegistrationInfo> reg;
+	if (SUCCEEDED(task->get_RegistrationInfo(&reg)) && reg) {
+		reg->put_Description(_bstr_t(L"Launches OBS Studio with elevated privileges at logon."));
+		reg->put_Author(_bstr_t(L"OBS Studio"));
+	}
+
+	ComPtr<IPrincipal> principal;
+	if (SUCCEEDED(task->get_Principal(&principal)) && principal) {
+		principal->put_Id(_bstr_t(L"Principal"));
+		principal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
+		principal->put_RunLevel(TASK_RUNLEVEL_HIGHEST);
+		if (!user.empty())
+			principal->put_UserId(_bstr_t(user.c_str()));
+	}
+
+	ComPtr<ITaskSettings> settings;
+	if (SUCCEEDED(task->get_Settings(&settings)) && settings) {
+		settings->put_StartWhenAvailable(VARIANT_FALSE);
+		settings->put_DisallowStartIfOnBatteries(VARIANT_FALSE);
+		settings->put_StopIfGoingOnBatteries(VARIANT_FALSE);
+		settings->put_MultipleInstances(TASK_INSTANCES_IGNORE_NEW);
+		settings->put_ExecutionTimeLimit(_bstr_t(L"PT0S"));
+		settings->put_Enabled(VARIANT_TRUE);
+	}
+
+	/* Logon trigger with a short delay so the shell is ready first. */
+	ComPtr<ITriggerCollection> triggers;
+	if (SUCCEEDED(task->get_Triggers(&triggers)) && triggers) {
+		ComPtr<ITrigger> trigger;
+		if (SUCCEEDED(triggers->Create(TASK_TRIGGER_LOGON, &trigger)) && trigger) {
+			ComQIPtr<ILogonTrigger> logon(trigger.Get());
+			if (logon) {
+				logon->put_Id(_bstr_t(L"LogonTrigger"));
+				logon->put_Delay(_bstr_t(L"PT8S"));
+				if (!user.empty())
+					logon->put_UserId(_bstr_t(user.c_str()));
+			}
+		}
+	}
+
+	/* Exec action: this executable, started in its own directory. */
+	wchar_t exePath[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, exePath, _countof(exePath));
+	std::wstring workDir(exePath);
+	size_t slash = workDir.find_last_of(L"\\/");
+	workDir = (slash != std::wstring::npos) ? workDir.substr(0, slash) : std::wstring();
+
+	ComPtr<IActionCollection> actions;
+	if (SUCCEEDED(task->get_Actions(&actions)) && actions) {
+		ComPtr<IAction> action;
+		if (SUCCEEDED(actions->Create(TASK_ACTION_EXEC, &action)) && action) {
+			ComQIPtr<IExecAction> exec(action.Get());
+			if (exec) {
+				exec->put_Path(_bstr_t(exePath));
+				if (!workDir.empty())
+					exec->put_WorkingDirectory(_bstr_t(workDir.c_str()));
+			}
+		}
+	}
+
+	ComPtr<IRegisteredTask> registered;
+	hr = folder->RegisterTaskDefinition(_bstr_t(kLaunchTaskName), task.Get(), TASK_CREATE_OR_UPDATE, _variant_t(),
+					    _variant_t(), TASK_LOGON_INTERACTIVE_TOKEN, _variant_t(), &registered);
+	if (FAILED(hr)) {
+		if (hr == E_ACCESSDENIED)
+			error = "Access denied — OBS must be running as administrator to register the "
+				"startup task.";
+		else
+			error = HrToMessage("Failed to register the scheduled task", hr);
+		return false;
+	}
+
+	return true;
 }
 
 bool HighContrastEnabled()
