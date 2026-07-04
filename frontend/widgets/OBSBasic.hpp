@@ -43,6 +43,7 @@
 #include <QAccessible>
 #include <QImage>
 #include <QSystemTrayIcon>
+#include <QTimer>
 
 #include <atomic>
 #include <deque>
@@ -735,6 +736,20 @@ private:
 #endif
 				trayIcon->setIcon(QIcon::fromTheme("obs-tray", trayIconFile));
 			}
+
+			/* If output-filter usage changed while outputs were
+			 * running, rebuild the handler so its dedicated mixes
+			 * match the new state. Deferred: this may be called
+			 * from one of the handler's own signal callbacks, so
+			 * the handler must not be destroyed on this stack. */
+			QTimer::singleShot(0, this, [this]() {
+				if (!outputHandler || outputHandler->Active())
+					return;
+				bool want = obs_output_filtered_source_count() > 0;
+				bool have = outputHandler->streamVideo || outputHandler->recordVideo;
+				if (want != have)
+					ResetOutputs();
+			});
 		} else if (outputHandler->Active() && trayIcon && trayIcon->isVisible()) {
 			if (os_atomic_load_bool(&recording_paused)) {
 #ifdef __APPLE__

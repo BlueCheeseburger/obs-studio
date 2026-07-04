@@ -214,6 +214,11 @@ void obs_remove_video_mix(video_t *video)
 	pthread_mutex_unlock(&obs->video.mixes_mutex);
 }
 
+long obs_output_filtered_source_count(void)
+{
+	return os_atomic_load_long(&obs->video.output_filtered_count);
+}
+
 void obs_view_enum_video_info(obs_view_t *view, bool (*enum_proc)(void *, struct obs_video_info *), void *param)
 {
 	pthread_mutex_lock(&obs->video.mixes_mutex);

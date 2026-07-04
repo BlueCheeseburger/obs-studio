@@ -219,8 +219,19 @@ const char *GetStreamOutputType(const obs_service_t *service)
 
 BasicOutputHandler::BasicOutputHandler(OBSBasic *main_) : main(main_)
 {
-	streamVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_STREAM);
-	recordVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_RECORD);
+	/* Only pay for the dedicated stream/record render mixes when at least
+	 * one source actually uses an output filter. Each extra mix costs a
+	 * full set of render/output textures (significant VRAM at high
+	 * resolutions) plus per-frame work — with a game contending for the
+	 * same GPU that pressure can push the encoder into progressive frame
+	 * skipping. With no filtered sources every mix is identical, so the
+	 * outputs can encode straight from the main mix. */
+	if (obs_output_filtered_source_count() > 0) {
+		streamVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_STREAM);
+		recordVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_RECORD);
+	} else {
+		blog(LOG_INFO, "No output-filtered sources; outputs will use the main video mix");
+	}
 
 	if (main->vcamEnabled) {
 		virtualCam = obs_output_create(VIRTUAL_CAM_ID, "virtualcam_output", nullptr, nullptr);
