@@ -301,6 +301,7 @@ void VoiceMatchDialog::poll()
 
 	bool warm = calldata_bool(&cd, "mic_warm") && calldata_bool(&cd, "ref_warm");
 	bool hasRef = calldata_bool(&cd, "has_ref");
+	long long refCount = calldata_int(&cd, "ref_count");
 	calldata_free(&cd);
 
 	if (!obs_source_enabled(filter))
@@ -310,7 +311,8 @@ void VoiceMatchDialog::poll()
 	else if (!warm)
 		statusLabel->setText(QTStr("VoiceMatch.Viz.Learning"));
 	else
-		statusLabel->setText(QTStr("VoiceMatch.Viz.Matching"));
+		statusLabel->setText(QTStr("VoiceMatch.Viz.Matching") +
+				     QStringLiteral(" · %1 ref%2").arg(refCount).arg(refCount == 1 ? "" : "s"));
 
 	graph->addSample(s, warm);
 }
