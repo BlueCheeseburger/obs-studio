@@ -5,6 +5,7 @@
 #include <components/VolumeName.hpp>
 #include <components/VolumeSlider.hpp>
 #include <dialogs/NameDialog.hpp>
+#include <dialogs/VoiceMatchDialog.hpp>
 #include <widgets/OBSBasic.hpp>
 
 #include <QIcon>
@@ -113,6 +114,11 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 		noiseSupprButton->setToolTip(QTStr("Basic.AudioMixer.NoiseSuppress"));
 		utils->addClass(noiseSupprButton, "btn-noise-suppress");
 		utils->applyStateStylingEventFilter(noiseSupprButton);
+
+		/* Voice Level Match — opens the live match visualization */
+		voiceMatchButton = new QPushButton(QStringLiteral("≈"), this);
+		voiceMatchButton->setToolTip(QTStr("Basic.AudioMixer.VoiceMatch"));
+		utils->applyStateStylingEventFilter(voiceMatchButton);
 	}
 
 	bool muted = obs_source_muted(source);
@@ -164,6 +170,8 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 		connect(noiseSupprButton, &QPushButton::clicked, this, &VolumeControl::toggleNoiseSuppr);
 		updateNoiseSupprButton();
 	}
+	if (voiceMatchButton)
+		connect(voiceMatchButton, &QPushButton::clicked, this, &VolumeControl::openVoiceMatch);
 
 	OBSBasic *main = OBSBasic::Get();
 	if (main) {
@@ -340,6 +348,8 @@ void VolumeControl::setLayoutVertical(bool vertical)
 		controlLayout->addWidget(monitorButton);
 		if (noiseSupprButton)
 			controlLayout->addWidget(noiseSupprButton);
+		if (voiceMatchButton)
+			controlLayout->addWidget(voiceMatchButton);
 		controlLayout->addWidget(audioFilterLabel);
 
 		meterLayout->setContentsMargins(0, 0, 0, 0);
@@ -418,6 +428,8 @@ void VolumeControl::setLayoutVertical(bool vertical)
 		buttonLayout->addWidget(monitorButton);
 		if (noiseSupprButton)
 			buttonLayout->addWidget(noiseSupprButton);
+		if (voiceMatchButton)
+			buttonLayout->addWidget(voiceMatchButton);
 		buttonLayout->addWidget(audioFilterLabel);
 
 		controlLayout->addItem(buttonLayout);
@@ -1218,6 +1230,20 @@ void VolumeControl::toggleNoiseSuppr()
 	}
 
 	updateNoiseSupprButton();
+}
+
+void VolumeControl::openVoiceMatch()
+{
+	OBSSource source = OBSGetStrongRef(weakSource());
+	if (!source)
+		return;
+
+	/* Ensure the filter exists (created with Desktop Audio as the default
+	 * reference), then show the live visualization. */
+	VoiceMatchDialog::FindOrCreateFilter(source);
+
+	auto *dialog = new VoiceMatchDialog(source, OBSBasic::Get());
+	dialog->show();
 }
 
 void VolumeControl::updateNoiseSupprButton()

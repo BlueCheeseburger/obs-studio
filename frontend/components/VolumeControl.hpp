@@ -82,6 +82,7 @@ private:
 	QPushButton *muteButton;
 	QPushButton *monitorButton;
 	QPushButton *noiseSupprButton{nullptr};
+	QPushButton *voiceMatchButton{nullptr};
 	QLabel *audioFilterLabel{nullptr};
 
 	OBSFader obs_fader;
@@ -127,6 +128,7 @@ private slots:
 	void updateAudioOutputFilter();
 	void toggleNoiseSuppr();
 	void updateNoiseSupprButton();
+	void openVoiceMatch();
 
 	void handleMuteButton(bool checked);
 	void handleMonitorButton(bool checked);
