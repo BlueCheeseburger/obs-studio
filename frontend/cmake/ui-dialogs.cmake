@@ -17,6 +17,8 @@ target_sources(
     dialogs/LogUploadDialog.hpp
     dialogs/NameDialog.cpp
     dialogs/NameDialog.hpp
+    dialogs/VoiceMatchDialog.cpp
+    dialogs/VoiceMatchDialog.hpp
     dialogs/OAuthLogin.cpp
     dialogs/OAuthLogin.hpp
     dialogs/OBSAbout.cpp

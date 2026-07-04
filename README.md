@@ -58,6 +58,23 @@ Windows Media Player Legacy and then the system default player.
 
 ## Audio & sources
 
+### Voice Level Match (auto mic leveling against your voice call)
+A new **Voice Level Match** audio filter keeps your microphone's *typical speaking
+level* matched to the *typical level of the voices in your voice call* (Desktop
+Audio), so you sit at the same loudness as your friends without riding the fader.
+
+- Both your mic and the reference source run a lightweight vocal-isolation chain
+  (150 Hz–4 kHz speech band-pass + voice-activity detection); only detected speech
+  contributes to the level estimates.
+- The level trackers are streaming **medians**, so **yelling and whispering are
+  outliers that barely move the baseline** — your dynamics pass through untouched.
+  Only your sustained "normal talking" level is matched.
+- The correction is a slow-slewing trim (≈1 dB/s, configurable), not a compressor.
+- Click the **≈ button** on your mic's Audio Mixer row for a **live visualization**:
+  both voice-level estimates with voice-activity lights, the applied gain, and a
+  scrolling 60-second history graph. The button auto-creates the filter (reference
+  defaults to Desktop Audio) on first use.
+
 ### Audio-only sources managed from the Audio Mixer
 Audio-only sources are hidden from the **Sources** panel and managed entirely from the
 **Audio Mixer**, which gains per-source controls:
