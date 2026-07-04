@@ -116,8 +116,9 @@ VolumeControl::VolumeControl(obs_source_t *source, QWidget *parent, bool vertica
 		utils->applyStateStylingEventFilter(noiseSupprButton);
 
 		/* Voice Level Match — opens the live match visualization */
-		voiceMatchButton = new QPushButton(QStringLiteral("≈"), this);
+		voiceMatchButton = new QPushButton(this);
 		voiceMatchButton->setToolTip(QTStr("Basic.AudioMixer.VoiceMatch"));
+		utils->addClass(voiceMatchButton, "btn-voice-match");
 		utils->applyStateStylingEventFilter(voiceMatchButton);
 	}
 

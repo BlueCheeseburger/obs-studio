@@ -1630,7 +1630,8 @@ QSlider::handle:disabled {
 
 .btn-mute,
 .btn-monitor,
-.btn-noise-suppress {
+.btn-noise-suppress,
+.btn-voice-match {
     width: var(--icon_small);
     height: var(--icon_small);
     background-color: transparent;
@@ -1650,14 +1651,16 @@ QSlider::handle:disabled {
 
 .btn-mute:hover,
 .btn-monitor:hover,
-.btn-noise-suppress:hover {
+.btn-noise-suppress:hover,
+.btn-voice-match:hover {
     background-color: var(--button_bg_hover);
     border-color: transparent;
 }
 
 .btn-mute:pressed,
 .btn-monitor:pressed,
-.btn-noise-suppress:pressed {
+.btn-noise-suppress:pressed,
+.btn-voice-match:pressed {
     background-color: var(--button_bg_down);
 }
 
@@ -1733,6 +1736,18 @@ QSlider::handle:disabled {
 }
 
 .btn-noise-suppress:focus {
+    border-color: var(--green1);
+}
+
+/* Voice Level Match Button */
+
+.btn-voice-match {
+    background: transparent;
+    color: var(--text);
+    qproperty-icon: url(theme:Dark/voice-match.svg);
+}
+
+.btn-voice-match:focus {
     border-color: var(--green1);
 }
 
