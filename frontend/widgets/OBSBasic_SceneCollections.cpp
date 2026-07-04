@@ -1459,7 +1459,14 @@ retryScene:
 		opt_start_streaming = false;
 	}
 
-	bool recordOnStartup = config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup");
+	/* One-shot: LoadData also runs when the user switches scene
+	 * collections mid-session, and auto-record must only fire for the
+	 * initial load of the launch. */
+	static bool recordOnStartupHandled = false;
+	bool recordOnStartup = !recordOnStartupHandled &&
+			       config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup");
+	recordOnStartupHandled = true;
+
 	if ((opt_start_recording || recordOnStartup) && !safe_mode) {
 		blog(LOG_INFO, "Starting recording on startup");
 		QMetaObject::invokeMethod(this, "StartRecording", Qt::QueuedConnection);

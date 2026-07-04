@@ -59,8 +59,10 @@ enum TaskbarThumbButton {
 unsigned int GetTaskbarButtonCreatedMsg();
 
 /* Adds (first call after the taskbar button exists) or updates the thumb
- * buttons to reflect the current recording state. */
-void TaskbarButtonsSetState(bool recording);
+ * buttons to reflect the current recording state. While recording, pass the
+ * elapsed recording time (in seconds) to show it in the Stop button tooltip;
+ * pass a negative value to omit it. */
+void TaskbarButtonsSetState(bool recording, int elapsedSeconds = -1);
 #endif
 
 #ifdef _WIN32
