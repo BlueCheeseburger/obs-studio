@@ -18,6 +18,7 @@
 #include <deque>
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QTimer;
 
@@ -38,11 +39,14 @@ private:
 	OBSWeakSourceAutoRelease weakSource;
 
 	QCheckBox *enabledCheck;
+	QComboBox *refCombo;
 	QLabel *statusLabel;
 	VoiceMatchGraph *graph;
 	QPointer<QTimer> pollTimer;
 
 	void poll();
+	void populateRefCombo();
+	void applyRefSelection(int index);
 };
 
 /* Custom-painted bars + history graph */

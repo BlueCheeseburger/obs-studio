@@ -2,7 +2,10 @@
 
 #include <OBSApp.hpp>
 
+#include <qt-wrappers.hpp>
+
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
 #include <QPainter>
 #include <QTimer>
@@ -245,6 +248,14 @@ VoiceMatchDialog::VoiceMatchDialog(OBSSource source, QWidget *parent)
 	topRow->addWidget(statusLabel);
 	layout->addLayout(topRow);
 
+	/* friends' voice source selection: auto-detect or one specific source */
+	auto *refRow = new QHBoxLayout();
+	auto *refLabel = new QLabel(QTStr("VoiceMatch.Viz.RefSource"), this);
+	refCombo = new QComboBox(this);
+	refRow->addWidget(refLabel);
+	refRow->addWidget(refCombo, 1);
+	layout->addLayout(refRow);
+
 	graph = new VoiceMatchGraph(this);
 	layout->addWidget(graph, 1);
 
@@ -252,6 +263,8 @@ VoiceMatchDialog::VoiceMatchDialog(OBSSource source, QWidget *parent)
 	if (filter) {
 		enabledCheck->setChecked(obs_source_enabled(filter));
 	}
+
+	populateRefCombo();
 
 	connect(enabledCheck, &QCheckBox::toggled, this, [this](bool on) {
 		OBSSourceAutoRelease src = obs_weak_source_get_source(weakSource);
@@ -262,11 +275,88 @@ VoiceMatchDialog::VoiceMatchDialog(OBSSource source, QWidget *parent)
 			obs_source_set_enabled(f, on);
 	});
 
+	connect(refCombo, &QComboBox::activated, this, &VoiceMatchDialog::applyRefSelection);
+
 	pollTimer = new QTimer(this);
 	connect(pollTimer, &QTimer::timeout, this, &VoiceMatchDialog::poll);
 	pollTimer->start(33);
 
 	resize(520, 380);
+}
+
+/* Fill the combo: "Auto-detect" plus every audio source except the mic
+ * itself, preselecting the filter's current configuration. */
+void VoiceMatchDialog::populateRefCombo()
+{
+	refCombo->clear();
+	refCombo->addItem(QTStr("VoiceMatch.Viz.RefAuto"), QString());
+
+	OBSSourceAutoRelease src = obs_weak_source_get_source(weakSource);
+	if (!src)
+		return;
+
+	struct EnumCtx {
+		QComboBox *combo;
+		obs_source_t *self;
+	} ctx{refCombo, src.Get()};
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			auto *c = static_cast<EnumCtx *>(param);
+			if (source == c->self)
+				return true;
+			if ((obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) == 0)
+				return true;
+			QString name = QT_UTF8(obs_source_get_name(source));
+			c->combo->addItem(name, name);
+			return true;
+		},
+		&ctx);
+
+	/* preselect from filter settings */
+	OBSSourceAutoRelease filter = find_voice_match_filter(src);
+	if (!filter)
+		return;
+
+	OBSDataAutoRelease settings = obs_source_get_settings(filter);
+	bool autoRefs = obs_data_get_bool(settings, "auto_references");
+	QString manual = QT_UTF8(obs_data_get_string(settings, "reference_source"));
+
+	if (autoRefs || manual.isEmpty() || manual == QStringLiteral("none")) {
+		refCombo->setCurrentIndex(0);
+	} else {
+		int idx = refCombo->findData(manual);
+		if (idx < 0) {
+			/* configured source doesn't exist right now; show it anyway */
+			refCombo->addItem(manual, manual);
+			idx = refCombo->count() - 1;
+		}
+		refCombo->setCurrentIndex(idx);
+	}
+}
+
+/* Auto-detect → auto_references on; specific source → auto off, that source
+ * becomes the sole reference. */
+void VoiceMatchDialog::applyRefSelection(int index)
+{
+	OBSSourceAutoRelease src = obs_weak_source_get_source(weakSource);
+	if (!src)
+		return;
+	OBSSourceAutoRelease filter = find_voice_match_filter(src);
+	if (!filter)
+		return;
+
+	QString name = refCombo->itemData(index).toString();
+
+	OBSDataAutoRelease settings = obs_data_create();
+	if (name.isEmpty()) {
+		obs_data_set_bool(settings, "auto_references", true);
+		obs_data_set_string(settings, "reference_source", "none");
+	} else {
+		obs_data_set_bool(settings, "auto_references", false);
+		obs_data_set_string(settings, "reference_source", QT_TO_UTF8(name));
+	}
+	obs_source_update(filter, settings);
 }
 
 void VoiceMatchDialog::poll()
