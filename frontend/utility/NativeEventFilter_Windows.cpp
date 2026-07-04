@@ -49,7 +49,10 @@ bool NativeEventFilter::nativeEventFilter(const QByteArray &eventType, void *mes
 
 		switch (msg->message) {
 		case WM_COMMAND:
-			if (HIWORD(msg->wParam) == THBN_CLICKED) {
+			/* Thumbnail-toolbar clicks arrive as WM_COMMAND on the
+			 * main window only; ignore matching notification codes
+			 * from controls on other OBS windows. */
+			if (HIWORD(msg->wParam) == THBN_CLICKED && msg->hwnd == (HWND)main->winId()) {
 				switch (LOWORD(msg->wParam)) {
 				case TaskbarThumbRecord:
 					main->TriggerRecordButton();

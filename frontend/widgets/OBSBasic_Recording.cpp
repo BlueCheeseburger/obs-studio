@@ -237,6 +237,21 @@ void OBSBasic::RecordingStart()
 		sysTrayRecord->setText(QTStr("Basic.Main.StopRecording"));
 
 	recordingStopping = false;
+
+	/* Tick the elapsed-time display in the taskbar button tooltip. The
+	 * count freezes while the recording is paused, matching the status
+	 * bar's record timer. */
+	taskbarElapsedSeconds = 0;
+	if (!taskbarElapsedTimer) {
+		taskbarElapsedTimer = new QTimer(this);
+		connect(taskbarElapsedTimer, &QTimer::timeout, this, [this]() {
+			if (!os_atomic_load_bool(&recording_paused))
+				taskbarElapsedSeconds++;
+			UpdateTaskbarButtons();
+		});
+	}
+	taskbarElapsedTimer->start(1000);
+
 	UpdateTaskbarButtons();
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTED);
 
@@ -256,6 +271,8 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 	if (sysTrayRecord)
 		sysTrayRecord->setText(QTStr("Basic.Main.StartRecording"));
 
+	if (taskbarElapsedTimer)
+		taskbarElapsedTimer->stop();
 	UpdateTaskbarButtons();
 
 	blog(LOG_INFO, RECORDING_STOP);
@@ -350,7 +367,8 @@ bool OBSBasic::RecordingActive()
 void OBSBasic::UpdateTaskbarButtons()
 {
 #ifdef _WIN32
-	TaskbarButtonsSetState(RecordingActive());
+	bool recording = RecordingActive();
+	TaskbarButtonsSetState(recording, recording ? taskbarElapsedSeconds : -1);
 #endif
 }
 

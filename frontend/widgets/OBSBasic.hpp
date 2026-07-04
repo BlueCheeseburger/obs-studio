@@ -743,7 +743,7 @@ private:
 			 * from one of the handler's own signal callbacks, so
 			 * the handler must not be destroyed on this stack. */
 			QTimer::singleShot(0, this, [this]() {
-				if (!outputHandler || outputHandler->Active())
+				if (isClosing() || !outputHandler || outputHandler->Active())
 					return;
 				bool want = obs_output_filtered_source_count() > 0;
 				bool have = outputHandler->streamVideo || outputHandler->recordVideo;
@@ -1013,6 +1013,10 @@ private:
 	bool recordingStarted = false;
 	bool isRecordingPausable = false;
 	bool recordingPaused = false;
+
+	/* Drives the elapsed-time display in the taskbar thumb button tooltip */
+	QPointer<QTimer> taskbarElapsedTimer;
+	int taskbarElapsedSeconds = 0;
 
 	void AutoRemux(QString input, bool no_show = false);
 	void UpdateIsRecordingPausable();

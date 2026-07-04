@@ -376,10 +376,10 @@ void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
 	ITaskbarList4 *taskbarIcon;
 	auto hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbarIcon));
 
-	if (FAILED(hr)) {
-		taskbarIcon->Release();
+	/* On failure CoCreateInstance sets the out pointer to NULL; there is
+	 * nothing to release. */
+	if (FAILED(hr))
 		return;
-	}
 
 	hr = taskbarIcon->HrInit();
 
@@ -406,8 +406,10 @@ void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
 	if (!qicon.isNull()) {
 		Q_GUI_EXPORT HICON qt_pixmapToWinHICON(const QPixmap &p);
 		hicon = qt_pixmapToWinHICON(qicon.pixmap(GetSystemMetrics(SM_CXSMICON)));
-		if (!hicon)
+		if (!hicon) {
+			taskbarIcon->Release();
 			return;
+		}
 	}
 
 	taskbarIcon->SetOverlayIcon(hwnd, hicon, nullptr);
@@ -470,7 +472,7 @@ static void SetThumbTip(THUMBBUTTON &btn, const QString &text)
 static ComPtr<ITaskbarList3> thumbBarList;
 static bool thumbButtonsAdded = false;
 
-void TaskbarButtonsSetState(bool recording)
+void TaskbarButtonsSetState(bool recording, int elapsedSeconds)
 {
 	if (!hwnd)
 		return;
@@ -502,12 +504,21 @@ void TaskbarButtonsSetState(bool recording)
 	buttons[0].dwFlags = recording ? THBF_DISABLED : THBF_ENABLED;
 	SetThumbTip(buttons[0], QTStr("Basic.Main.StartRecording"));
 
-	/* Stop Recording: enabled only while recording. */
+	/* Stop Recording: enabled only while recording; tooltip shows the
+	 * elapsed recording time. */
+	QString stopTip = QTStr("Basic.Main.StopRecording");
+	if (recording && elapsedSeconds >= 0) {
+		stopTip += QStringLiteral(" — %1:%2:%3")
+				   .arg(elapsedSeconds / 3600, 2, 10, QChar('0'))
+				   .arg((elapsedSeconds / 60) % 60, 2, 10, QChar('0'))
+				   .arg(elapsedSeconds % 60, 2, 10, QChar('0'));
+	}
+
 	buttons[1].dwMask = (THUMBBUTTONMASK)(THB_ICON | THB_FLAGS);
 	buttons[1].iId = TaskbarThumbStop;
 	buttons[1].hIcon = iconStop;
 	buttons[1].dwFlags = recording ? THBF_ENABLED : THBF_DISABLED;
-	SetThumbTip(buttons[1], QTStr("Basic.Main.StopRecording"));
+	SetThumbTip(buttons[1], stopTip);
 
 	if (!thumbButtonsAdded) {
 		/* ThumbBarAddButtons only succeeds once the taskbar button has
