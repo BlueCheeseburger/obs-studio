@@ -469,6 +469,23 @@ void OBSBasic::on_actionRecordOnStartup_toggled(bool checked)
 	config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
 }
 
+void OBSBasic::on_actionLaunchAtLogin_toggled(bool checked)
+{
+#ifdef _WIN32
+	std::string error;
+	if (SetLaunchAtLogin(checked, error))
+		return;
+
+	/* Registration failed (e.g. not elevated). Revert the checkbox to the
+	 * real on-disk state and tell the user why. */
+	QSignalBlocker block(ui->actionLaunchAtLogin);
+	ui->actionLaunchAtLogin->setChecked(IsLaunchAtLoginEnabled());
+	OBSMessageBox::warning(this, QTStr("LaunchAtLogin.Failed.Title"), QT_UTF8(error.c_str()));
+#else
+	UNUSED_PARAMETER(checked);
+#endif
+}
+
 void OBSBasic::on_actionAlwaysOnTop_triggered()
 {
 #ifndef _WIN32

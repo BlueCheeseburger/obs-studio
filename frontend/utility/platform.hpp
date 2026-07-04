@@ -63,6 +63,12 @@ unsigned int GetTaskbarButtonCreatedMsg();
  * elapsed recording time (in seconds) to show it in the Stop button tooltip;
  * pass a negative value to omit it. */
 void TaskbarButtonsSetState(bool recording, int elapsedSeconds = -1);
+
+/* "Launch OBS at login (elevated)" via a Windows Scheduled Task — the only
+ * mechanism that can auto-start an elevated app at logon without a UAC prompt.
+ * Registering the task requires OBS to currently be running elevated. */
+bool IsLaunchAtLoginEnabled();
+bool SetLaunchAtLogin(bool enable, std::string &error);
 #endif
 
 #ifdef _WIN32
