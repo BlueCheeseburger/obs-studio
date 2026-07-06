@@ -84,6 +84,9 @@ void OBSBasic::SystemTrayInit()
 
 void OBSBasic::IconActivated(QSystemTrayIcon::ActivationReason reason)
 {
+	/* interacting with the tray acknowledges a health alert */
+	StopTrayAlertFlash();
+
 	OBSBasic::updateSysTrayProjectorMenu();
 
 #ifdef __APPLE__

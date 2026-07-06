@@ -41,6 +41,7 @@
 #include <settings/OBSBasicSettings.hpp>
 #include <utility/LiveThumbnailGrabber.hpp>
 #include <utility/QuickTransition.hpp>
+#include <utility/RecordingHealth.hpp>
 #include <utility/SceneRenameDelegate.hpp>
 #if defined(_WIN32) || defined(WHATSNEW_ENABLED)
 #include <utility/WhatsNewInfoThread.hpp>
@@ -1266,6 +1267,16 @@ void OBSBasic::OBSInit()
 
 	TaskbarOverlayInit();
 	UpdateTaskbarButtons();
+
+	recordingHealth = new RecordingHealthMonitor(this);
+	connect(recordingHealth, &RecordingHealthMonitor::healthAlert, this, &OBSBasic::RecordingHealthAlert);
+
+	/* test/diagnostic hook: probe an arbitrary file at startup */
+	{
+		const char *checkFile = getenv("OBS_HEALTH_CHECK_FILE");
+		if (checkFile && *checkFile)
+			recordingHealth->checkFileAsync(QT_UTF8(checkFile));
+	}
 
 #ifdef __APPLE__
 	disableColorSpaceConversion(this);
