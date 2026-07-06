@@ -21,6 +21,7 @@
 
 #include <components/UIValidation.hpp>
 #include <dialogs/OBSRemux.hpp>
+#include <utility/RecordingHealth.hpp>
 
 #include <qt-wrappers.hpp>
 
@@ -252,6 +253,9 @@ void OBSBasic::RecordingStart()
 	}
 	taskbarElapsedTimer->start(1000);
 
+	if (recordingHealth && outputHandler)
+		recordingHealth->recordingStarted(outputHandler->fileOutput);
+
 	UpdateTaskbarButtons();
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTED);
 
@@ -274,6 +278,12 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 	if (taskbarElapsedTimer)
 		taskbarElapsedTimer->stop();
 	UpdateTaskbarButtons();
+
+	if (recordingHealth) {
+		recordingHealth->recordingStopped();
+		if (outputHandler && code == OBS_OUTPUT_SUCCESS)
+			recordingHealth->checkFileAsync(QT_UTF8(outputHandler->lastRecordingPath.c_str()));
+	}
 
 	blog(LOG_INFO, RECORDING_STOP);
 
@@ -333,6 +343,10 @@ void OBSBasic::RecordingFileChanged(QString lastRecordingPath)
 {
 	ui->statusbar->ShowRecordingSavedMessage(lastRecordingPath);
 	AutoRemux(lastRecordingPath, true);
+
+	/* completed split-file segment: verify it while the next one records */
+	if (recordingHealth)
+		recordingHealth->checkFileAsync(lastRecordingPath);
 }
 
 void OBSBasic::RecordActionTriggered()
@@ -380,6 +394,85 @@ void OBSBasic::TriggerRecordButton()
 void OBSBasic::TriggerStopButton()
 {
 	RecordActionTriggered();
+}
+
+/* ------------------------------------------------------------------------- */
+/* Recording health alerts (low framerate): desktop notification + flashing
+ * red tray icon. */
+
+void OBSBasic::RecordingHealthAlert(const QString &message)
+{
+	blog(LOG_WARNING, "[recording health] ALERT: %s", QT_TO_UTF8(message));
+	SysTrayNotify(message, QSystemTrayIcon::Warning);
+	StartTrayAlertFlash();
+}
+
+void OBSBasic::StartTrayAlertFlash()
+{
+	if (!trayIcon || !trayIcon->isVisible())
+		return;
+
+	if (!trayFlashTimer) {
+		trayFlashTimer = new QTimer(this);
+		connect(trayFlashTimer, &QTimer::timeout, this, [this]() {
+			if (!trayIcon)
+				return;
+			trayFlashOn = !trayFlashOn;
+			if (trayFlashOn)
+				trayIcon->setIcon(QIcon::fromTheme("obs-tray-active",
+								   QIcon(":/res/images/tray_active.png")));
+			else
+				trayIcon->setIcon(QIcon::fromTheme("obs-tray", QIcon(":/res/images/obs.png")));
+		});
+	}
+
+	if (!trayFlashTimer->isActive()) {
+		trayFlashTimer->start(500);
+		/* self-dismiss so an unattended alert doesn't flash forever */
+		QTimer::singleShot(60000, this, &OBSBasic::StopTrayAlertFlash);
+	}
+}
+
+void OBSBasic::StopTrayAlertFlash()
+{
+	if (!trayFlashTimer || !trayFlashTimer->isActive())
+		return;
+	trayFlashTimer->stop();
+	RestoreTrayIcon();
+}
+
+void OBSBasic::RestoreTrayIcon()
+{
+	if (!trayIcon)
+		return;
+
+	QIcon icon;
+	if (os_atomic_load_bool(&recording_paused)) {
+#ifdef __APPLE__
+		QIcon f = QIcon(":/res/images/obs_paused_macos.svg");
+		f.setIsMask(true);
+		icon = QIcon::fromTheme("obs-tray-paused", f);
+#else
+		icon = QIcon::fromTheme("obs-tray-paused", QIcon(":/res/images/obs_paused.png"));
+#endif
+	} else if (outputHandler && outputHandler->Active()) {
+#ifdef __APPLE__
+		QIcon f = QIcon(":/res/images/tray_active_macos.svg");
+		f.setIsMask(true);
+		icon = QIcon::fromTheme("obs-tray-active", f);
+#else
+		icon = QIcon::fromTheme("obs-tray-active", QIcon(":/res/images/tray_active.png"));
+#endif
+	} else {
+#ifdef __APPLE__
+		QIcon f = QIcon(":/res/images/obs_macos.svg");
+		f.setIsMask(true);
+		icon = QIcon::fromTheme("obs-tray", f);
+#else
+		icon = QIcon::fromTheme("obs-tray", QIcon(":/res/images/obs.png"));
+#endif
+	}
+	trayIcon->setIcon(icon);
 }
 
 void OBSBasic::PauseRecording()

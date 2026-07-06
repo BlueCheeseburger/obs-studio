@@ -59,6 +59,7 @@ class OBSBasicProperties;
 class OBSBasicSourceSelect;
 class OBSBasicTransform;
 class LiveThumbnailGrabber;
+class RecordingHealthMonitor;
 class OBSLogViewer;
 class OBSMissingFiles;
 class OBSProjector;
@@ -1018,6 +1019,22 @@ private:
 	/* Drives the elapsed-time display in the taskbar thumb button tooltip */
 	QPointer<QTimer> taskbarElapsedTimer;
 	int taskbarElapsedSeconds = 0;
+
+	/* Low-framerate detection (live skip counters + finished-file probe) */
+	RecordingHealthMonitor *recordingHealth = nullptr;
+	QPointer<QTimer> trayFlashTimer;
+	bool trayFlashOn = false;
+
+	void StartTrayAlertFlash();
+	void RestoreTrayIcon();
+
+private slots:
+	void RecordingHealthAlert(const QString &message);
+
+public:
+	void StopTrayAlertFlash();
+
+private:
 
 	void AutoRemux(QString input, bool no_show = false);
 	void UpdateIsRecordingPausable();

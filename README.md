@@ -46,6 +46,20 @@ hands-off "boot → OBS runs elevated → recording begins" pipeline. Toggling i
 requires OBS to currently be running as administrator (so it has permission to create
 the task); un-checking removes the task.
 
+### Recording health alerts (low-framerate detection)
+OBS watches recording health and raises a **desktop notification + flashing red tray
+icon** when something is wrong:
+
+- **Live watchdog** — while recording, the encoder's skipped-frame counters are
+  polled every 2 s; sustained skipping (encoder overload) alerts within seconds.
+- **File probe** — when a recording (or split-file segment) finishes, a background
+  thread demuxes it and analyzes video packets (no decoding): missing-packet gaps
+  *and* "frozen content" collapse, where duplicate frames make footage a slideshow
+  even though timestamps look normal. Detection compares against the file's own
+  early baseline, so intentionally static footage doesn't false-alarm.
+- Clicking the tray icon acknowledges the alert; the flash self-dismisses after 60 s.
+- Diagnostic hook: set `OBS_HEALTH_CHECK_FILE=<path>` before launch to probe any file.
+
 ### "Open in Media Player" link
 When a recording is saved, the status bar shows an **Open in Media Player** link that
 opens the finished file directly in the modern Windows **Media Player** app
