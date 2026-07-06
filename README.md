@@ -16,7 +16,8 @@ Hovering the OBS icon on the Windows taskbar shows a live-preview popup with two
 media-player-style buttons beneath it (like Spotify's controls):
 
 - **● Start Recording** — enabled only while *not* recording.
-- **■ Stop Recording** — enabled only *while* recording.
+- **■ Stop Recording** — enabled only *while* recording; its tooltip shows the
+  **elapsed recording time** (updates every second, freezes while paused).
 
 Each button is contextual (the invalid one is greyed out), so you can start and stop
 recording without bringing the OBS window to the foreground. The Stop button still
@@ -74,20 +75,29 @@ Windows Media Player Legacy and then the system default player.
 
 ### Voice Level Match (auto mic leveling against your voice call)
 A new **Voice Level Match** audio filter keeps your microphone's *typical speaking
-level* matched to the *typical level of the voices in your voice call* (Desktop
-Audio), so you sit at the same loudness as your friends without riding the fader.
+level* matched to the *typical level of the voices in your voice call*, so you sit
+at the same loudness as your friends without riding the fader.
 
-- Both your mic and the reference source run a lightweight vocal-isolation chain
-  (150 Hz–4 kHz speech band-pass + voice-activity detection); only detected speech
-  contributes to the level estimates.
+- **Multi-reference with auto-detection**: the filter automatically attaches to every
+  source that looks like voice-chat audio — Desktop Audio captures, Application Audio
+  Captures (e.g. Discord), and any audio source named like a voice feed
+  (discord/party/chat/voice/xbox/teamspeak/…), up to 8 at once, reconciled live as
+  sources come and go. All of them feed one shared "Friends" level. You can also lock
+  the reference to **one specific source** from the visualization dialog.
+- Every side runs a lightweight vocal-isolation chain: 150 Hz–4 kHz speech band-pass
+  split into low/high sub-bands (voiced + consonant energy both required), an
+  SNR-vs-noise-floor gate, a **syllabic modulation gate** (speech pulses at 3–8 Hz;
+  steady music/game beds don't), and an onset/hangover state machine. Only detected
+  speech contributes to the level estimates.
 - The level trackers are streaming **medians**, so **yelling and whispering are
   outliers that barely move the baseline** — your dynamics pass through untouched.
   Only your sustained "normal talking" level is matched.
 - The correction is a slow-slewing trim (≈1 dB/s, configurable), not a compressor.
-- Click the **≈ button** on your mic's Audio Mixer row for a **live visualization**:
-  both voice-level estimates with voice-activity lights, the applied gain, and a
-  scrolling 60-second history graph. The button auto-creates the filter (reference
-  defaults to Desktop Audio) on first use.
+- Click the **voice-match button** (two facing voice waves with an equals sign) on
+  your mic's Audio Mixer row for a **live visualization**: both voice-level estimates
+  with voice-activity lights, the applied gain, a friends'-voice source picker
+  (auto-detect or one specific source), the live reference count, and a scrolling
+  60-second history graph. The button auto-creates the filter on first use.
 
 ### Audio-only sources managed from the Audio Mixer
 Audio-only sources are hidden from the **Sources** panel and managed entirely from the
@@ -96,6 +106,16 @@ Audio-only sources are hidden from the **Sources** panel and managed entirely fr
 - Remove a source directly from the mixer.
 - Toggle output/monitoring visibility.
 - Toggle **noise suppression** with a dedicated icon.
+
+### Per-source Output Visibility (stream-only / record-only)
+Right-click any source → **Output Visibility** to show it in **all outputs**
+(default), **stream only**, or **record only** — e.g. keep an overlay on stream but
+out of the recording. Sources with a non-default mode show an indicator badge in the
+Sources panel; the setting persists with the scene collection.
+
+The dedicated stream/record render passes are only created while at least one source
+actually uses the feature — with no filtered sources, outputs encode straight from
+the main mix, so there is no GPU/VRAM overhead for setups that don't use it.
 
 ---
 
