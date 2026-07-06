@@ -1473,7 +1473,14 @@ retryScene:
 		opt_start_recording = false;
 	}
 
-	if (opt_start_replaybuffer && !safe_mode) {
+	/* One-shot, same reasoning as recordOnStartup above. */
+	static bool replayBufferOnStartupHandled = false;
+	bool replayBufferOnStartup = !replayBufferOnStartupHandled &&
+				     config_get_bool(App()->GetUserConfig(), "BasicWindow", "ReplayBufferOnStartup");
+	replayBufferOnStartupHandled = true;
+
+	if ((opt_start_replaybuffer || replayBufferOnStartup) && !safe_mode) {
+		blog(LOG_INFO, "Starting replay buffer on startup");
 		QMetaObject::invokeMethod(this, "StartReplayBuffer", Qt::QueuedConnection);
 		opt_start_replaybuffer = false;
 	}
