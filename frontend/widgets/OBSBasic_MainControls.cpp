@@ -469,6 +469,12 @@ void OBSBasic::on_actionRecordOnStartup_toggled(bool checked)
 	config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
 }
 
+void OBSBasic::on_actionReplayBufferOnStartup_toggled(bool checked)
+{
+	config_set_bool(App()->GetUserConfig(), "BasicWindow", "ReplayBufferOnStartup", checked);
+	config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
+}
+
 void OBSBasic::on_actionLaunchAtLogin_toggled(bool checked)
 {
 #ifdef _WIN32

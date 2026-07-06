@@ -623,6 +623,7 @@ private slots:
 	void on_actionFullscreenInterface_triggered();
 	void on_actionRemux_triggered();
 	void on_actionRecordOnStartup_toggled(bool checked);
+	void on_actionReplayBufferOnStartup_toggled(bool checked);
 	void on_actionLaunchAtLogin_toggled(bool checked);
 	void on_action_Settings_triggered();
 	void on_actionShowMacPermissions_triggered();

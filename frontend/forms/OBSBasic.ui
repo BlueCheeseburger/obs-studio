@@ -725,6 +725,7 @@
     <addaction name="actionRemux"/>
     <addaction name="separator"/>
     <addaction name="actionRecordOnStartup"/>
+    <addaction name="actionReplayBufferOnStartup"/>
     <addaction name="actionLaunchAtLogin"/>
     <addaction name="separator"/>
     <addaction name="action_Settings"/>
@@ -1977,6 +1978,14 @@
    </property>
    <property name="text">
     <string>Basic.MainMenu.File.RecordOnStartup</string>
+   </property>
+  </action>
+  <action name="actionReplayBufferOnStartup">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Basic.MainMenu.File.ReplayBufferOnStartup</string>
    </property>
   </action>
   <action name="actionLaunchAtLogin">

@@ -1182,6 +1182,8 @@ void OBSBasic::OBSInit()
 
 	ui->actionRecordOnStartup->setChecked(
 		config_get_bool(App()->GetUserConfig(), "BasicWindow", "RecordOnStartup"));
+	ui->actionReplayBufferOnStartup->setChecked(
+		config_get_bool(App()->GetUserConfig(), "BasicWindow", "ReplayBufferOnStartup"));
 
 #ifdef _WIN32
 	{
