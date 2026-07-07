@@ -14,7 +14,10 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSpinBox>
 #include <QUuid>
+
+#include <filesystem>
 
 static const QUuid &CustomServerUUID()
 {
@@ -119,14 +122,41 @@ void OBSBasicSettings::InitStreamPage()
 	connect(ui->multiStreamYouTubeEnable, &QCheckBox::toggled, this, [this](bool checked) {
 		ui->multiStreamYouTubeKeyLabel->setVisible(checked);
 		ui->multiStreamYouTubeKey->setVisible(checked);
+		UpdateMultiStreamVideoRows();
 	});
 	connect(ui->multiStreamTwitchEnable, &QCheckBox::toggled, this, [this](bool checked) {
 		ui->multiStreamTwitchKeyLabel->setVisible(checked);
 		ui->multiStreamTwitchKey->setVisible(checked);
+		UpdateMultiStreamVideoRows();
 	});
 	connect(ui->multiStreamTikTokEnable, &QCheckBox::toggled, this, [this](bool checked) {
 		ui->multiStreamTikTokKeyLabel->setVisible(checked);
 		ui->multiStreamTikTokKey->setVisible(checked);
+		UpdateMultiStreamVideoRows();
+	});
+
+	/* Customize-video-settings checkbox per destination: reveal the
+	 * width/height/bitrate row, and the first time it's checked with all
+	 * fields still at "same as primary" (0), prefill from the primary
+	 * stream's current output settings so the user edits from a sensible
+	 * starting point instead of blank/zero fields. */
+	connect(ui->multiStreamYouTubeCustomVideo, &QCheckBox::toggled, this, [this](bool checked) {
+		UpdateMultiStreamVideoRows();
+		if (checked)
+			PrefillMultiStreamVideoSettings(ui->multiStreamYouTubeWidth, ui->multiStreamYouTubeHeight,
+							ui->multiStreamYouTubeBitrate);
+	});
+	connect(ui->multiStreamTwitchCustomVideo, &QCheckBox::toggled, this, [this](bool checked) {
+		UpdateMultiStreamVideoRows();
+		if (checked)
+			PrefillMultiStreamVideoSettings(ui->multiStreamTwitchWidth, ui->multiStreamTwitchHeight,
+							ui->multiStreamTwitchBitrate);
+	});
+	connect(ui->multiStreamTikTokCustomVideo, &QCheckBox::toggled, this, [this](bool checked) {
+		UpdateMultiStreamVideoRows();
+		if (checked)
+			PrefillMultiStreamVideoSettings(ui->multiStreamTikTokWidth, ui->multiStreamTikTokHeight,
+							ui->multiStreamTikTokBitrate);
 	});
 
 	/* Explain the relationship between the main service and these extras. */
@@ -284,20 +314,31 @@ void OBSBasicSettings::LoadStream1Settings()
 	config_t *config = main->Config();
 
 	auto loadDestination = [&](const char *section, QCheckBox *enable, QLineEdit *server, QLineEdit *key,
-				   const char *defaultServer) {
+				   const char *defaultServer, QCheckBox *customVideo, QSpinBox *width,
+				   QSpinBox *height, QSpinBox *bitrate) {
 		enable->setChecked(config_get_bool(config, section, "Enabled"));
 		const char *srv = config_get_string(config, section, "Server");
 		server->setText(QT_UTF8((srv && *srv) ? srv : defaultServer));
 		const char *k = config_get_string(config, section, "Key");
 		key->setText(QT_UTF8(k ? k : ""));
+
+		customVideo->setChecked(config_get_bool(config, section, "VideoOverrideEnabled"));
+		width->setValue((int)config_get_int(config, section, "Width"));
+		height->setValue((int)config_get_int(config, section, "Height"));
+		bitrate->setValue((int)config_get_int(config, section, "Bitrate"));
 	};
 
 	loadDestination("MultiStreamYouTube", ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeServer,
-			ui->multiStreamYouTubeKey, "rtmp://a.rtmp.youtube.com/live2");
+			ui->multiStreamYouTubeKey, "rtmp://a.rtmp.youtube.com/live2", ui->multiStreamYouTubeCustomVideo,
+			ui->multiStreamYouTubeWidth, ui->multiStreamYouTubeHeight, ui->multiStreamYouTubeBitrate);
 	loadDestination("MultiStreamTwitch", ui->multiStreamTwitchEnable, ui->multiStreamTwitchServer,
-			ui->multiStreamTwitchKey, "rtmp://live.twitch.tv/app");
+			ui->multiStreamTwitchKey, "rtmp://live.twitch.tv/app", ui->multiStreamTwitchCustomVideo,
+			ui->multiStreamTwitchWidth, ui->multiStreamTwitchHeight, ui->multiStreamTwitchBitrate);
 	loadDestination("MultiStreamTikTok", ui->multiStreamTikTokEnable, ui->multiStreamTikTokServer,
-			ui->multiStreamTikTokKey, "rtmp://push.tiktok.com/live/");
+			ui->multiStreamTikTokKey, "rtmp://push.tiktok.com/live/", ui->multiStreamTikTokCustomVideo,
+			ui->multiStreamTikTokWidth, ui->multiStreamTikTokHeight, ui->multiStreamTikTokBitrate);
+
+	UpdateMultiStreamVideoRows();
 
 	loading = false;
 
@@ -448,18 +489,26 @@ void OBSBasicSettings::SaveStream1Settings()
 	/* Multi-stream destinations */
 	config_t *config = main->Config();
 
-	auto saveDestination = [&](const char *section, QCheckBox *enable, QLineEdit *server, QLineEdit *key) {
+	auto saveDestination = [&](const char *section, QCheckBox *enable, QLineEdit *server, QLineEdit *key,
+				   QCheckBox *customVideo, QSpinBox *width, QSpinBox *height, QSpinBox *bitrate) {
 		config_set_bool(config, section, "Enabled", enable->isChecked());
 		config_set_string(config, section, "Server", QT_TO_UTF8(server->text().trimmed()));
 		config_set_string(config, section, "Key", QT_TO_UTF8(key->text()));
+		config_set_bool(config, section, "VideoOverrideEnabled", customVideo->isChecked());
+		config_set_int(config, section, "Width", width->value());
+		config_set_int(config, section, "Height", height->value());
+		config_set_int(config, section, "Bitrate", bitrate->value());
 	};
 
 	saveDestination("MultiStreamYouTube", ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeServer,
-			ui->multiStreamYouTubeKey);
+			ui->multiStreamYouTubeKey, ui->multiStreamYouTubeCustomVideo, ui->multiStreamYouTubeWidth,
+			ui->multiStreamYouTubeHeight, ui->multiStreamYouTubeBitrate);
 	saveDestination("MultiStreamTwitch", ui->multiStreamTwitchEnable, ui->multiStreamTwitchServer,
-			ui->multiStreamTwitchKey);
+			ui->multiStreamTwitchKey, ui->multiStreamTwitchCustomVideo, ui->multiStreamTwitchWidth,
+			ui->multiStreamTwitchHeight, ui->multiStreamTwitchBitrate);
 	saveDestination("MultiStreamTikTok", ui->multiStreamTikTokEnable, ui->multiStreamTikTokServer,
-			ui->multiStreamTikTokKey);
+			ui->multiStreamTikTokKey, ui->multiStreamTikTokCustomVideo, ui->multiStreamTikTokWidth,
+			ui->multiStreamTikTokHeight, ui->multiStreamTikTokBitrate);
 }
 
 void OBSBasicSettings::UpdateMoreInfoLink()
@@ -1931,4 +1980,84 @@ void OBSBasicSettings::ResetEncoders(bool streamOnly)
 		s3.unblock();
 		ui->simpleOutStrAEncoder->setCurrentIndex(idx);
 	}
+}
+
+void OBSBasicSettings::UpdateMultiStreamVideoRows()
+{
+	auto updateRow = [](QCheckBox *enable, QCheckBox *customVideo, QLabel *settingsLabel, QWidget *width,
+			    QWidget *height, QWidget *widthXLabel, QWidget *bitrateLabel, QWidget *bitrate) {
+		bool destEnabled = enable->isChecked();
+		customVideo->setVisible(destEnabled);
+
+		bool showSettings = destEnabled && customVideo->isChecked();
+		settingsLabel->setVisible(showSettings);
+		width->setVisible(showSettings);
+		height->setVisible(showSettings);
+		widthXLabel->setVisible(showSettings);
+		bitrateLabel->setVisible(showSettings);
+		bitrate->setVisible(showSettings);
+	};
+
+	updateRow(ui->multiStreamYouTubeEnable, ui->multiStreamYouTubeCustomVideo, ui->multiStreamYouTubeVideoSettingsLabel,
+		  ui->multiStreamYouTubeWidth, ui->multiStreamYouTubeHeight, ui->multiStreamYouTubeWidthXLabel,
+		  ui->multiStreamYouTubeBitrateLabel, ui->multiStreamYouTubeBitrate);
+	updateRow(ui->multiStreamTwitchEnable, ui->multiStreamTwitchCustomVideo, ui->multiStreamTwitchVideoSettingsLabel,
+		  ui->multiStreamTwitchWidth, ui->multiStreamTwitchHeight, ui->multiStreamTwitchWidthXLabel,
+		  ui->multiStreamTwitchBitrateLabel, ui->multiStreamTwitchBitrate);
+	updateRow(ui->multiStreamTikTokEnable, ui->multiStreamTikTokCustomVideo, ui->multiStreamTikTokVideoSettingsLabel,
+		  ui->multiStreamTikTokWidth, ui->multiStreamTikTokHeight, ui->multiStreamTikTokWidthXLabel,
+		  ui->multiStreamTikTokBitrateLabel, ui->multiStreamTikTokBitrate);
+}
+
+/* Reads the primary stream's currently configured output resolution and
+ * video bitrate, mirroring how AdvancedOutput.cpp reads its encoder
+ * settings, so a newly-customized destination starts from the same values
+ * as the primary stream rather than blank/zero fields. */
+static bool GetPrimaryStreamVideoDefaults(config_t *config, int &width, int &height, int &bitrate)
+{
+	obs_video_info ovi;
+	if (!obs_get_video_info(&ovi))
+		return false;
+
+	width = (int)ovi.output_width;
+	height = (int)ovi.output_height;
+
+	const char *mode = config_get_string(config, "Output", "Mode");
+	if (mode && strcmp(mode, "Advanced") == 0) {
+		const OBSBasic *basic = OBSBasic::Get();
+		const OBSProfile &currentProfile = basic->GetCurrentProfile();
+		const std::filesystem::path jsonFilePath = currentProfile.path / std::filesystem::u8path("streamEncoder.json");
+
+		OBSDataAutoRelease settings;
+		BPtr<char> jsonData = os_quick_read_utf8_file(jsonFilePath.u8string().c_str());
+		if (!!jsonData)
+			settings = obs_data_create_from_json(jsonData);
+
+		bitrate = settings ? (int)obs_data_get_int(settings, "bitrate") : 0;
+		if (bitrate <= 0)
+			bitrate = (int)config_get_uint(config, "SimpleOutput", "VBitrate");
+	} else {
+		bitrate = (int)config_get_uint(config, "SimpleOutput", "VBitrate");
+	}
+
+	return true;
+}
+
+void OBSBasicSettings::PrefillMultiStreamVideoSettings(QSpinBox *width, QSpinBox *height, QSpinBox *bitrate)
+{
+	/* Only prefill while every field is still at its "same as primary"
+	 * default (0) — don't clobber values the user already customized. */
+	if (width->value() != 0 || height->value() != 0 || bitrate->value() != 0)
+		return;
+
+	int w = 0, h = 0, b = 0;
+	if (!GetPrimaryStreamVideoDefaults(main->Config(), w, h, b))
+		return;
+
+	if (w > 0)
+		width->setValue(w);
+	if (h > 0)
+		height->setValue(h);
+	if (b > 0)
+		bitrate->setValue(b);
 }

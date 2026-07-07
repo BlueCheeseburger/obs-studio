@@ -14,8 +14,21 @@ struct MultiStreamDestination {
 	std::string key;
 	bool enabled = false;
 
+	/* Video settings for this destination. When customVideoSettings is
+	 * false, the destination shares the primary stream's encoder as-is.
+	 * When true, width/height/bitrate (any of which may be 0 to mean
+	 * "keep the primary's value") are applied to a dedicated encoder
+	 * created just for this destination. */
+	bool customVideoSettings = false;
+	int width = 0;
+	int height = 0;
+	int bitrate = 0;
+
 	OBSOutputAutoRelease output;
 	OBSServiceAutoRelease service;
+	/* Only set when customVideoSettings is in effect; kept alive here
+	 * since obs_output_set_video_encoder() does not take ownership. */
+	OBSEncoderAutoRelease encoder;
 };
 
 /* Outcome of a Start() call, so the caller can tell the user exactly what
