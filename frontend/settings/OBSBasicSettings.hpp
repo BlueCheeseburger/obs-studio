@@ -226,6 +226,8 @@ private:
 	void UpdateServiceRecommendations();
 	void UpdateMoreInfoLink();
 	void UpdateAdvNetworkGroup();
+	void UpdateMultiStreamVideoRows();
+	void PrefillMultiStreamVideoSettings(QSpinBox *width, QSpinBox *height, QSpinBox *bitrate);
 
 	/* Appearance */
 	void InitAppearancePage();

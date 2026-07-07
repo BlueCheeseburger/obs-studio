@@ -2263,6 +2263,102 @@
                      </property>
                     </widget>
                    </item>
+                   <item row="3" column="1">
+                    <widget class="QCheckBox" name="multiStreamYouTubeCustomVideo">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.CustomVideo</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="multiStreamYouTubeVideoSettingsLabel">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.VideoSettings</string>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>170</width>
+                       <height>0</height>
+                      </size>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="1">
+                    <layout class="QHBoxLayout" name="multiStreamYouTubeVideoSettingsLayout">
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamYouTubeWidth">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>7680</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamYouTubeWidthXLabel">
+                       <property name="text">
+                        <string>x</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamYouTubeHeight">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>4320</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="multiStreamYouTubeVideoSpacer">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamYouTubeBitrateLabel">
+                       <property name="text">
+                        <string>Basic.Settings.Output.VideoBitrate</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamYouTubeBitrate">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>1000000</number>
+                       </property>
+                       <property name="suffix">
+                        <string> Kbps</string>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </item>
                   </layout>
                  </item>
                  <!-- Twitch -->
@@ -2334,6 +2430,102 @@
                      </property>
                     </widget>
                    </item>
+                   <item row="3" column="1">
+                    <widget class="QCheckBox" name="multiStreamTwitchCustomVideo">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.CustomVideo</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="multiStreamTwitchVideoSettingsLabel">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.VideoSettings</string>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>170</width>
+                       <height>0</height>
+                      </size>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="1">
+                    <layout class="QHBoxLayout" name="multiStreamTwitchVideoSettingsLayout">
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTwitchWidth">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>7680</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamTwitchWidthXLabel">
+                       <property name="text">
+                        <string>x</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTwitchHeight">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>4320</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="multiStreamTwitchVideoSpacer">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamTwitchBitrateLabel">
+                       <property name="text">
+                        <string>Basic.Settings.Output.VideoBitrate</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTwitchBitrate">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>1000000</number>
+                       </property>
+                       <property name="suffix">
+                        <string> Kbps</string>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
+                   </item>
                   </layout>
                  </item>
                  <!-- TikTok -->
@@ -2404,6 +2596,102 @@
                       <enum>QLineEdit::Password</enum>
                      </property>
                     </widget>
+                   </item>
+                   <item row="3" column="1">
+                    <widget class="QCheckBox" name="multiStreamTikTokCustomVideo">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.CustomVideo</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="multiStreamTikTokVideoSettingsLabel">
+                     <property name="text">
+                      <string>Basic.Settings.Stream.MultiStream.VideoSettings</string>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>170</width>
+                       <height>0</height>
+                      </size>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="1">
+                    <layout class="QHBoxLayout" name="multiStreamTikTokVideoSettingsLayout">
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTikTokWidth">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>7680</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamTikTokWidthXLabel">
+                       <property name="text">
+                        <string>x</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTikTokHeight">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>4320</number>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <spacer name="multiStreamTikTokVideoSpacer">
+                       <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="multiStreamTikTokBitrateLabel">
+                       <property name="text">
+                        <string>Basic.Settings.Output.VideoBitrate</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QSpinBox" name="multiStreamTikTokBitrate">
+                       <property name="minimum">
+                        <number>0</number>
+                       </property>
+                       <property name="maximum">
+                        <number>1000000</number>
+                       </property>
+                       <property name="suffix">
+                        <string> Kbps</string>
+                       </property>
+                       <property name="specialValueText">
+                        <string>Basic.Settings.Stream.MultiStream.SameAsPrimary</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
                    </item>
                   </layout>
                  </item>

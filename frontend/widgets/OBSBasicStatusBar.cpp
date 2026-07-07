@@ -619,10 +619,11 @@ static QString openRecordingLinkHtml(const QString &label, bool underline)
 		.arg(deco, label.toHtmlEscaped());
 }
 
-void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
+void OBSBasicStatusBar::ShowSavedMessageWithOpenLink(const QString &filePath, const QString &messageKey)
 {
 	savedRecordingPath = filePath;
-	savedMessageBase = QTStr("Basic.StatusBar.RecordingSavedTo").arg(filePath.toHtmlEscaped());
+	QByteArray keyUtf8 = messageKey.toUtf8();
+	savedMessageBase = QTStr(keyUtf8.constData()).arg(filePath.toHtmlEscaped());
 
 	QString html = savedMessageBase + " &nbsp;" + openRecordingLinkHtml(QTStr("Basic.StatusBar.OpenInMediaPlayer"), false);
 
@@ -630,6 +631,16 @@ void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
 	statusWidget->ui->message->setTextFormat(Qt::RichText);
 	statusWidget->ui->message->setText(html);
 	messageTimer->start(30000);
+}
+
+void OBSBasicStatusBar::ShowRecordingSavedMessage(const QString &filePath)
+{
+	ShowSavedMessageWithOpenLink(filePath, QStringLiteral("Basic.StatusBar.RecordingSavedTo"));
+}
+
+void OBSBasicStatusBar::ShowReplayBufferSavedMessage(const QString &filePath)
+{
+	ShowSavedMessageWithOpenLink(filePath, QStringLiteral("Basic.StatusBar.ReplayBufferSavedTo"));
 }
 
 void OBSBasicStatusBar::onOpenRecordingLinkHovered(const QString &link)

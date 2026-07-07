@@ -110,4 +110,8 @@ public:
 
 	void ReconnectClear();
 	void ShowRecordingSavedMessage(const QString &filePath);
+	void ShowReplayBufferSavedMessage(const QString &filePath);
+
+private:
+	void ShowSavedMessageWithOpenLink(const QString &filePath, const QString &messageKey);
 };

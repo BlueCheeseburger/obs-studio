@@ -40,7 +40,49 @@ void MultiStreamOutput::LoadConfig()
 
 		const char *key = config_get_string(config, section, "Key");
 		destinations[i].key = key ? key : "";
+
+		destinations[i].customVideoSettings = config_get_bool(config, section, "VideoOverrideEnabled");
+		destinations[i].width = (int)config_get_int(config, section, "Width");
+		destinations[i].height = (int)config_get_int(config, section, "Height");
+		destinations[i].bitrate = (int)config_get_int(config, section, "Bitrate");
 	}
+}
+
+/* Builds a dedicated encoder for a destination that has custom video
+ * settings, cloning the primary encoder's type and settings so anything
+ * the user didn't override (e.g. codec, preset) still matches the primary
+ * stream. Returns nullptr (falling back to the shared primary encoder) if
+ * the clone fails for any reason. */
+static OBSEncoderAutoRelease CreateDestinationEncoder(const MultiStreamDestination &dest, obs_encoder_t *primaryEncoder)
+{
+	const char *encoderId = obs_encoder_get_id(primaryEncoder);
+	if (!encoderId) {
+		blog(LOG_WARNING, "MultiStream: Could not determine primary encoder type for %s", dest.name.c_str());
+		return nullptr;
+	}
+
+	OBSDataAutoRelease settings = obs_data_create();
+	OBSDataAutoRelease primarySettings = obs_encoder_get_settings(primaryEncoder);
+	if (primarySettings)
+		obs_data_apply(settings, primarySettings);
+
+	if (dest.bitrate > 0) {
+		obs_data_set_int(settings, "bitrate", dest.bitrate);
+		obs_data_set_int(settings, "buffer_size", dest.bitrate);
+	}
+
+	std::string encoderName = "multistream_video_" + dest.name;
+	OBSEncoderAutoRelease encoder = obs_video_encoder_create(encoderId, encoderName.c_str(), settings, nullptr);
+	if (!encoder) {
+		blog(LOG_WARNING, "MultiStream: Failed to create custom video encoder for %s", dest.name.c_str());
+		return nullptr;
+	}
+
+	obs_encoder_set_video(encoder, obs_get_video());
+	if (dest.width > 0 && dest.height > 0)
+		obs_encoder_set_scaled_size(encoder, dest.width, dest.height);
+
+	return encoder;
 }
 
 bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encoder_t *videoEncoder,
@@ -70,7 +112,11 @@ bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encod
 		return false;
 	}
 
-	obs_output_set_video_encoder(dest.output, videoEncoder);
+	dest.encoder = nullptr;
+	if (dest.customVideoSettings)
+		dest.encoder = CreateDestinationEncoder(dest, videoEncoder);
+
+	obs_output_set_video_encoder(dest.output, dest.encoder ? dest.encoder.Get() : videoEncoder);
 	obs_output_set_audio_encoder(dest.output, audioEncoder, 0);
 	obs_output_set_service(dest.output, dest.service);
 	obs_output_set_reconnect_settings(dest.output, 20, 2);
@@ -81,6 +127,7 @@ bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encod
 		     error ? error : "Unknown error");
 		dest.output = nullptr;
 		dest.service = nullptr;
+		dest.encoder = nullptr;
 		return false;
 	}
 
@@ -110,6 +157,7 @@ MultiStreamStartResult MultiStreamOutput::Start(obs_encoder_t *videoEncoder, obs
 		 */
 		dest.output = nullptr;
 		dest.service = nullptr;
+		dest.encoder = nullptr;
 
 		if (!dest.enabled)
 			continue;
