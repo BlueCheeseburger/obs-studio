@@ -2775,6 +2775,13 @@
                    </property>
                   </widget>
                  </item>
+                 <item row="4" column="1">
+                  <widget class="QCheckBox" name="streamingChecklistEnable">
+                   <property name="text">
+                    <string>Basic.Settings.Stream.StreamingChecklist</string>
+                   </property>
+                  </widget>
+                 </item>
                 </layout>
                </widget>
               </item>

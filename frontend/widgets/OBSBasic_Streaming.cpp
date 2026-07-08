@@ -20,6 +20,7 @@
 #include "OBSBasic.hpp"
 
 #include <components/UIValidation.hpp>
+#include <dialogs/StreamingChecklistDialog.hpp>
 #ifdef YOUTUBE_ENABLED
 #include <docks/YouTubeAppDock.hpp>
 #include <utility/YoutubeApiWrappers.hpp>
@@ -501,6 +502,14 @@ void OBSBasic::StreamActionTriggered()
 							QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
 			if (button == QMessageBox::No)
+				return;
+		}
+
+		bool showChecklist =
+			config_get_bool(App()->GetUserConfig(), "BasicWindow", "StreamingChecklistEnabled");
+		if (showChecklist && isVisible()) {
+			StreamingChecklistDialog checklist(this);
+			if (checklist.exec() != QDialog::Accepted)
 				return;
 		}
 
