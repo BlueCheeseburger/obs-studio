@@ -791,6 +791,12 @@ public:
 	bool Active() const;
 	void ResetOutputs();
 
+	/* Routes each audio source's mixer tracks to match its Output
+	 * Visibility filter (stream-only / record-only / all), splitting the
+	 * recording onto its own track when needed. Advanced output mode
+	 * only. */
+	void UpdateAudioOutputFilterRouting();
+
 	inline void EnableOutputs(bool enable)
 	{
 		if (enable) {

@@ -23,9 +23,91 @@
 
 #include <QDir>
 
+/* Audio counterpart of the per-source Output Visibility feature. The video
+ * side renders separate stream/record mixes; audio separation works through
+ * mixer tracks instead: the stream output consumes its configured track and
+ * the recording is moved onto its own track, then each source's track mask
+ * is set from its filter. Without this, "stream only" / "record only"
+ * silently did nothing for audio — e.g. Desktop Audio (record-only) and a
+ * game capture's audio (stream-only) both landed in the recording, doubling
+ * the game sound with a capture-latency echo. */
+void OBSBasic::UpdateAudioOutputFilterRouting()
+{
+	if (obs_output_filtered_source_count() == 0)
+		return;
+
+	const char *mode = config_get_string(activeConfiguration, "Output", "Mode");
+	bool adv = astrcmpi(mode, "Advanced") == 0;
+	if (!adv) {
+		blog(LOG_WARNING, "Audio output separation: sources have stream-only/record-only "
+				  "filters, but audio separation requires Advanced output mode");
+		return;
+	}
+
+	uint32_t streamTrack = (uint32_t)config_get_int(activeConfiguration, "AdvOut", "TrackIndex");
+	if (streamTrack < 1 || streamTrack > MAX_AUDIO_MIXES)
+		streamTrack = 1;
+	uint32_t streamMask = 1u << (streamTrack - 1);
+
+	/* the recording must consume a different track than the stream,
+	 * otherwise per-source separation is impossible */
+	uint32_t recTracks = (uint32_t)config_get_int(activeConfiguration, "AdvOut", "RecTracks");
+	if (recTracks == 0 || (recTracks & streamMask) != 0) {
+		uint32_t recTrack = (streamTrack == 1) ? 2 : 1;
+		recTracks = 1u << (recTrack - 1);
+		config_set_int(activeConfiguration, "AdvOut", "RecTracks", recTracks);
+		config_save_safe(activeConfiguration, "tmp", nullptr);
+		blog(LOG_INFO,
+		     "Audio output separation: recording audio moved to track %u "
+		     "(stream uses track %u)",
+		     recTrack, streamTrack);
+	}
+
+	struct RouteCtx {
+		uint32_t streamMask;
+		uint32_t recMask;
+	} ctx = {streamMask, recTracks};
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			auto *c = static_cast<RouteCtx *>(param);
+
+			if ((obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) == 0)
+				return true;
+
+			uint32_t mixers = obs_source_get_audio_mixers(source);
+			uint32_t want;
+
+			switch (obs_source_get_output_filter(source)) {
+			case OBS_SOURCE_OUTPUT_FILTER_STREAM:
+				want = c->streamMask;
+				break;
+			case OBS_SOURCE_OUTPUT_FILTER_RECORD:
+				want = c->recMask;
+				break;
+			default:
+				/* unfiltered: make sure it reaches both outputs,
+				 * keeping any extra tracks the user assigned */
+				want = mixers | c->streamMask | c->recMask;
+				break;
+			}
+
+			if (want != mixers) {
+				obs_source_set_audio_mixers(source, want);
+				blog(LOG_INFO,
+				     "Audio output separation: '%s' tracks 0x%X -> 0x%X",
+				     obs_source_get_name(source), mixers, want);
+			}
+			return true;
+		},
+		&ctx);
+}
+
 void OBSBasic::ResetOutputs()
 {
 	ProfileScope("OBSBasic::ResetOutputs");
+
+	UpdateAudioOutputFilterRouting();
 
 	const char *mode = config_get_string(activeConfiguration, "Output", "Mode");
 	bool advOut = astrcmpi(mode, "Advanced") == 0;

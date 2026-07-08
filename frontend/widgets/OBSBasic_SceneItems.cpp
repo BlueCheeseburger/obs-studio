@@ -676,6 +676,7 @@ void OBSBasic::CreateSourcePopupMenu(int idx, bool preview)
 					connect(a, &QAction::triggered, this, [source, val]() {
 						OBSBasic *main = OBSBasic::Get();
 						obs_source_set_output_filter(source, val);
+						main->UpdateAudioOutputFilterRouting();
 						main->SaveProject();
 
 						/* The dedicated stream/record mixes are only

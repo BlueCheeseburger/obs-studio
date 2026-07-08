@@ -1459,6 +1459,12 @@ retryScene:
 		opt_start_streaming = false;
 	}
 
+	/* Sources (and their output filters) only exist now — the startup
+	 * ResetOutputs() ran before the collection loaded, so apply the
+	 * audio track routing here, before any auto-started output begins
+	 * consuming tracks. */
+	UpdateAudioOutputFilterRouting();
+
 	/* One-shot: LoadData also runs when the user switches scene
 	 * collections mid-session, and auto-record must only fire for the
 	 * initial load of the launch. */
