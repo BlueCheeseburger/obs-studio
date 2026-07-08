@@ -310,6 +310,9 @@ void OBSBasicSettings::LoadStream1Settings()
 	ui->ignoreRecommended->setChecked(ignoreRecommended);
 	ui->whipSimulcastTotalLayers->setValue(whipSimulcastTotalLayers);
 
+	ui->streamingChecklistEnable->setChecked(
+		config_get_bool(App()->GetUserConfig(), "BasicWindow", "StreamingChecklistEnabled"));
+
 	/* Multi-stream destinations */
 	config_t *config = main->Config();
 
@@ -439,6 +442,9 @@ void OBSBasicSettings::SaveStream1Settings()
 	}
 
 	SaveCheckBox(ui->ignoreRecommended, "Stream1", "IgnoreRecommended");
+
+	config_set_bool(App()->GetUserConfig(), "BasicWindow", "StreamingChecklistEnabled",
+			ui->streamingChecklistEnable->isChecked());
 
 	if (autoThumbnailEnable) {
 		bool wasEnabled = config_get_bool(App()->GetUserConfig(), "BasicWindow", "AutoThumbnailEnabled");
