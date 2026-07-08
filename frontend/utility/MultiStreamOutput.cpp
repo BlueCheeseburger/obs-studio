@@ -26,6 +26,26 @@ MultiStreamOutput::MultiStreamOutput(OBSBasic *main_) : main(main_)
 	}
 }
 
+MultiStreamOutput::~MultiStreamOutput()
+{
+	/* Member destructors (for the OBSAutoRelease fields in each
+	 * MultiStreamDestination) run AFTER this body, so the encoder that
+	 * reads from croppedVideo is still alive here — release it (and its
+	 * output/service) explicitly first, matching the assumption already
+	 * relied on elsewhere in this codebase (e.g. BasicOutputHandler's own
+	 * destructor) that outputs are fully stopped by the time these owning
+	 * objects are torn down. */
+	for (auto &dest : destinations) {
+		dest.output = nullptr;
+		dest.service = nullptr;
+		dest.encoder = nullptr;
+		if (dest.croppedVideo) {
+			obs_remove_video_mix(dest.croppedVideo);
+			dest.croppedVideo = nullptr;
+		}
+	}
+}
+
 void MultiStreamOutput::LoadConfig()
 {
 	config_t *config = main->Config();
@@ -52,8 +72,14 @@ void MultiStreamOutput::LoadConfig()
  * settings, cloning the primary encoder's type and settings so anything
  * the user didn't override (e.g. codec, preset) still matches the primary
  * stream. Returns nullptr (falling back to the shared primary encoder) if
- * the clone fails for any reason. */
-static OBSEncoderAutoRelease CreateDestinationEncoder(const MultiStreamDestination &dest, obs_encoder_t *primaryEncoder)
+ * the clone fails for any reason.
+ *
+ * When a custom resolution is set, the encoder is fed from a dedicated
+ * cropped video mix (dest.croppedVideo) rather than the main video — this
+ * center-crops the canvas to the destination's aspect ratio before scaling,
+ * so e.g. a vertical resolution pulled from a horizontal canvas crops to
+ * fill instead of squashing/stretching the picture. */
+static OBSEncoderAutoRelease CreateDestinationEncoder(MultiStreamDestination &dest, obs_encoder_t *primaryEncoder)
 {
 	const char *encoderId = obs_encoder_get_id(primaryEncoder);
 	if (!encoderId) {
@@ -78,9 +104,19 @@ static OBSEncoderAutoRelease CreateDestinationEncoder(const MultiStreamDestinati
 		return nullptr;
 	}
 
-	obs_encoder_set_video(encoder, obs_get_video());
-	if (dest.width > 0 && dest.height > 0)
-		obs_encoder_set_scaled_size(encoder, dest.width, dest.height);
+	if (dest.width > 0 && dest.height > 0) {
+		dest.croppedVideo = obs_add_cropped_scaled_mix((uint32_t)dest.width, (uint32_t)dest.height);
+		if (dest.croppedVideo) {
+			obs_encoder_set_video(encoder, dest.croppedVideo);
+		} else {
+			blog(LOG_WARNING, "MultiStream: Failed to create cropped mix for %s, falling back to stretch",
+			     dest.name.c_str());
+			obs_encoder_set_video(encoder, obs_get_video());
+			obs_encoder_set_scaled_size(encoder, dest.width, dest.height);
+		}
+	} else {
+		obs_encoder_set_video(encoder, obs_get_video());
+	}
 
 	return encoder;
 }
@@ -128,6 +164,10 @@ bool MultiStreamOutput::StartDestination(MultiStreamDestination &dest, obs_encod
 		dest.output = nullptr;
 		dest.service = nullptr;
 		dest.encoder = nullptr;
+		if (dest.croppedVideo) {
+			obs_remove_video_mix(dest.croppedVideo);
+			dest.croppedVideo = nullptr;
+		}
 		return false;
 	}
 
@@ -158,6 +198,10 @@ MultiStreamStartResult MultiStreamOutput::Start(obs_encoder_t *videoEncoder, obs
 		dest.output = nullptr;
 		dest.service = nullptr;
 		dest.encoder = nullptr;
+		if (dest.croppedVideo) {
+			obs_remove_video_mix(dest.croppedVideo);
+			dest.croppedVideo = nullptr;
+		}
 
 		if (!dest.enabled)
 			continue;
