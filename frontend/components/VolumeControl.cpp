@@ -591,8 +591,15 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 			a->setChecked(curFilter == val);
 			OBSSource src = source;
 			connect(a, &QAction::triggered, this, [src, val]() {
+				OBSBasic *main = OBSBasic::Get();
 				obs_source_set_output_filter(src, val);
-				OBSBasic::Get()->SaveProject();
+				main->UpdateAudioOutputFilterRouting();
+				main->SaveProject();
+
+				/* an active recording keeps consuming its old
+				 * track until it restarts */
+				if (main->Active())
+					main->ShowStatusBarMessage(QTStr("OutputFilter.AppliesAfterRestart"));
 			});
 		};
 
