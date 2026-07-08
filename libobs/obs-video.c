@@ -167,6 +167,14 @@ static inline bool can_reuse_mix_texture(const struct obs_core_video_mix *mix, s
 		if (os_atomic_load_long(&obs->video.output_filtered_count) > 0 &&
 		    other->render_output_filter != mix->render_output_filter)
 			continue;
+		/* Cropped mixes render a different sub-rectangle of the canvas;
+		 * only reuse another mix's texture if it used the exact same
+		 * crop (matching base_width/base_height, already checked above,
+		 * plus the same offset). */
+		if (other->has_crop != mix->has_crop)
+			continue;
+		if (mix->has_crop && (other->crop_x0 != mix->crop_x0 || other->crop_y0 != mix->crop_y0))
+			continue;
 
 		*idx = i;
 		return true;
@@ -203,7 +211,17 @@ static inline void render_main_texture(struct obs_core_video_mix *video)
 	gs_set_render_target_with_color_space(video->render_texture, NULL, video->render_space);
 	gs_clear(GS_CLEAR_COLOR, &clear_color, 1.0f, 0);
 
-	set_render_size(base_width, base_height);
+	if (video->has_crop) {
+		/* Map only the cropped sub-rectangle of canvas space onto the
+		 * full render target, instead of the whole canvas. */
+		gs_enable_depth_test(false);
+		gs_set_cull_mode(GS_NEITHER);
+		gs_ortho(video->crop_x0, video->crop_x0 + (float)base_width, video->crop_y0,
+			video->crop_y0 + (float)base_height, -100.0f, 100.0f);
+		gs_set_viewport(0, 0, base_width, base_height);
+	} else {
+		set_render_size(base_width, base_height);
+	}
 
 	pthread_mutex_lock(&obs->data.draw_callbacks_mutex);
 

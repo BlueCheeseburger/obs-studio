@@ -385,6 +385,18 @@ struct obs_core_video_mix {
 	/* render_output_filter: which output type this mix renders for.
 	 * 0 = all (default), 1 = stream only, 2 = record only */
 	uint32_t render_output_filter;
+
+	/* When has_crop is set, render_main_texture uses a canvas-space ortho
+	 * of (crop_x0, crop_x0+base_width) x (crop_y0, crop_y0+base_height)
+	 * instead of (0, base_width) x (0, base_height) — i.e. the render
+	 * target shows a cropped sub-rectangle of the full canvas rather than
+	 * the whole canvas squashed to fit. Paired with an ovi.output_width/
+	 * output_height that matches base_width/base_height's aspect ratio,
+	 * this yields "crop to fill" scaling via the existing (distortion-
+	 * free, since aspect now matches) base->output resize. */
+	bool has_crop;
+	float crop_x0;
+	float crop_y0;
 };
 
 extern struct obs_core_video_mix *obs_create_video_mix(struct obs_video_info *ovi);

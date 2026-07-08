@@ -29,6 +29,11 @@ struct MultiStreamDestination {
 	/* Only set when customVideoSettings is in effect; kept alive here
 	 * since obs_output_set_video_encoder() does not take ownership. */
 	OBSEncoderAutoRelease encoder;
+	/* Only set when customVideoSettings is in effect: a dedicated video
+	 * mix that center-crops the canvas to this destination's aspect ratio
+	 * before scaling, so the custom resolution crops to fill rather than
+	 * stretching/distorting. Released via obs_remove_video_mix(). */
+	video_t *croppedVideo = nullptr;
 };
 
 /* Outcome of a Start() call, so the caller can tell the user exactly what
@@ -49,7 +54,7 @@ public:
 	static const char *const DEFAULT_SERVERS[MAX_DESTINATIONS];
 
 	explicit MultiStreamOutput(OBSBasic *main);
-	~MultiStreamOutput() = default;
+	~MultiStreamOutput();
 
 	void LoadConfig();
 

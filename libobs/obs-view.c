@@ -198,6 +198,73 @@ video_t *obs_add_output_filtered_mix(uint32_t render_output_filter)
 	return mix->video;
 }
 
+video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height)
+{
+	obs_canvas_t *canvas = obs->data.main_canvas;
+	if (!canvas || !canvas->mix)
+		return NULL;
+	if (!out_width || !out_height)
+		return NULL;
+
+	struct obs_video_info ovi = canvas->mix->ovi;
+	uint32_t src_w = ovi.base_width;
+	uint32_t src_h = ovi.base_height;
+	if (!src_w || !src_h)
+		return NULL;
+
+	double src_aspect = (double)src_w / (double)src_h;
+	double dst_aspect = (double)out_width / (double)out_height;
+
+	uint32_t crop_w = src_w;
+	uint32_t crop_h = src_h;
+	float crop_x0 = 0.0f;
+	float crop_y0 = 0.0f;
+
+	if (dst_aspect < src_aspect) {
+		/* destination is relatively narrower/taller: crop width, keep
+		 * full height (e.g. portrait destination from a landscape
+		 * canvas) */
+		crop_w = (uint32_t)((double)src_h * dst_aspect + 0.5);
+		if (crop_w < 2)
+			crop_w = 2;
+		crop_w &= ~1u;
+		if (crop_w > src_w)
+			crop_w = src_w & ~1u;
+		crop_x0 = (float)(src_w - crop_w) / 2.0f;
+	} else if (dst_aspect > src_aspect) {
+		/* destination is relatively wider: crop height, keep full
+		 * width */
+		crop_h = (uint32_t)((double)src_w / dst_aspect + 0.5);
+		if (crop_h < 2)
+			crop_h = 2;
+		crop_h &= ~1u;
+		if (crop_h > src_h)
+			crop_h = src_h & ~1u;
+		crop_y0 = (float)(src_h - crop_h) / 2.0f;
+	}
+
+	ovi.base_width = crop_w;
+	ovi.base_height = crop_h;
+	ovi.output_width = out_width;
+	ovi.output_height = out_height;
+
+	struct obs_core_video_mix *mix = obs_create_video_mix(&ovi);
+	if (!mix)
+		return NULL;
+
+	mix->view = &canvas->view;
+	mix->render_output_filter = 0;
+	mix->has_crop = true;
+	mix->crop_x0 = crop_x0;
+	mix->crop_y0 = crop_y0;
+
+	pthread_mutex_lock(&obs->video.mixes_mutex);
+	da_push_back(obs->video.mixes, &mix);
+	pthread_mutex_unlock(&obs->video.mixes_mutex);
+
+	return mix->video;
+}
+
 void obs_remove_video_mix(video_t *video)
 {
 	if (!video)

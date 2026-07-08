@@ -984,6 +984,12 @@ EXPORT video_t *obs_add_output_filtered_mix(uint32_t render_output_filter);
 /** Removes a previously added filtered video mix by its video handle. */
 EXPORT void obs_remove_video_mix(video_t *video);
 
+/** Adds a video mix that center-crops the main canvas to the aspect ratio of
+ *  out_width x out_height, then scales the cropped region to exactly that
+ *  size — "crop to fill", not a stretch. Renders all sources (no output-type
+ *  filtering). Call obs_remove_video_mix() to release it. */
+EXPORT video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height);
+
 /** Number of sources currently carrying a non-default output filter. */
 EXPORT long obs_output_filtered_source_count(void);
 
