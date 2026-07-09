@@ -105,7 +105,8 @@ static OBSEncoderAutoRelease CreateDestinationEncoder(MultiStreamDestination &de
 	}
 
 	if (dest.width > 0 && dest.height > 0) {
-		dest.croppedVideo = obs_add_cropped_scaled_mix((uint32_t)dest.width, (uint32_t)dest.height);
+		dest.croppedVideo = obs_add_cropped_scaled_mix((uint32_t)dest.width, (uint32_t)dest.height,
+								OBS_SOURCE_OUTPUT_FILTER_STREAM);
 		if (dest.croppedVideo) {
 			obs_encoder_set_video(encoder, dest.croppedVideo);
 		} else {
