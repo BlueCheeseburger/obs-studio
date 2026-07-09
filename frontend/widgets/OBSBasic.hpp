@@ -797,6 +797,10 @@ public:
 	 * only. */
 	void UpdateAudioOutputFilterRouting();
 
+	/* Read-only access for the output routing visualizer dialog. */
+	BasicOutputHandler *GetOutputHandler() const { return outputHandler.get(); }
+	MultiStreamOutput *GetMultiStreamOutput() const { return multiStreamOutput.get(); }
+
 	inline void EnableOutputs(bool enable)
 	{
 		if (enable) {

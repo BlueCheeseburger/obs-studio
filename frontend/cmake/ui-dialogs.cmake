@@ -21,6 +21,8 @@ target_sources(
     dialogs/VoiceMatchDialog.hpp
     dialogs/StreamingChecklistDialog.cpp
     dialogs/StreamingChecklistDialog.hpp
+    dialogs/OutputRoutingVisualizer.cpp
+    dialogs/OutputRoutingVisualizer.hpp
     dialogs/OAuthLogin.cpp
     dialogs/OAuthLogin.hpp
     dialogs/OBSAbout.cpp
