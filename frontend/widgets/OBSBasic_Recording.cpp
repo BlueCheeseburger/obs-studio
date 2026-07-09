@@ -197,6 +197,11 @@ void OBSBasic::WarnIfAudioSourcesExcludedFromRecording()
 				return true;
 			if (obs_source_muted(source))
 				return true;
+			/* Stream-only sources are deliberately excluded from the
+			 * recording by Output Visibility, not accidentally missing
+			 * a track assignment — nothing to warn about. */
+			if (obs_source_get_output_filter(source) == OBS_SOURCE_OUTPUT_FILTER_STREAM)
+				return true;
 			uint32_t mixers = obs_source_get_audio_mixers(source);
 			if ((mixers & c->recMask) == 0)
 				c->excluded.append(QT_UTF8(obs_source_get_name(source)));
