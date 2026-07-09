@@ -37,6 +37,7 @@
 #include <dialogs/OBSBasicInteraction.hpp>
 #include <dialogs/OBSBasicProperties.hpp>
 #include <dialogs/OBSBasicTransform.hpp>
+#include <dialogs/OutputRoutingVisualizer.hpp>
 #include <models/SceneCollection.hpp>
 #include <settings/OBSBasicSettings.hpp>
 #include <utility/LiveThumbnailGrabber.hpp>
@@ -309,6 +310,10 @@ OBSBasic::OBSBasic(QWidget *parent) : OBSMainWindow(parent), undo_s(ui), ui(new 
 	connect(controls, &OBSBasicControls::StudioModeButtonClicked, this, &OBSBasic::TogglePreviewProgramMode);
 
 	connect(controls, &OBSBasicControls::SettingsButtonClicked, this, &OBSBasic::on_action_Settings_triggered);
+	connect(controls, &OBSBasicControls::OutputRoutingButtonClicked, this, [this]() {
+		auto *dlg = new OutputRoutingVisualizer(this);
+		dlg->show();
+	});
 
 	/* Set up transitions combobox connections */
 	connect(this, &OBSBasic::TransitionAdded, this, [this](const QString &name, const QString &uuid) {
