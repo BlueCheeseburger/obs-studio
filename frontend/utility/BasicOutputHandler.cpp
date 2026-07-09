@@ -229,6 +229,8 @@ BasicOutputHandler::BasicOutputHandler(OBSBasic *main_) : main(main_)
 	if (obs_output_filtered_source_count() > 0) {
 		streamVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_STREAM);
 		recordVideo = obs_add_output_filtered_mix(OBS_SOURCE_OUTPUT_FILTER_RECORD);
+		blog(LOG_INFO, "Output-filtered sources present (%ld); created dedicated stream/record video mixes (%p/%p)",
+		     obs_output_filtered_source_count(), (void *)streamVideo, (void *)recordVideo);
 	} else {
 		blog(LOG_INFO, "No output-filtered sources; outputs will use the main video mix");
 	}

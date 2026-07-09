@@ -301,6 +301,10 @@ void OutputRoutingVisualizer::HookPreview(RoutingColumn *col, uint32_t boundW, u
 		divisor = 1;
 
 	col->hooked = video_output_connect2(col->video, &conv, divisor, &OutputRoutingVisualizer::RawVideoFrame, col);
+
+	blog(LOG_INFO,
+	     "OutputRoutingVisualizer: '%s' src=%ux%u preview=%ux%u divisor=%u hooked=%d",
+	     QT_TO_UTF8(col->title), srcW, srcH, w, h, divisor, col->hooked);
 }
 
 void OutputRoutingVisualizer::RawVideoFrame(void *param, struct video_data *frame)
@@ -308,6 +312,16 @@ void OutputRoutingVisualizer::RawVideoFrame(void *param, struct video_data *fram
 	auto *col = static_cast<RoutingColumn *>(param);
 	if (!frame || !frame->data[0] || !col->previewLabel || !col->previewW || !col->previewH)
 		return;
+
+	if (!col->loggedFirstFrame) {
+		col->loggedFirstFrame = true;
+		/* sample a few bytes to distinguish "never renders" from
+		 * "renders but comes out black" once this is checked in the log */
+		uint8_t b0 = frame->data[0][0], b1 = frame->data[0][1], b2 = frame->data[0][2];
+		blog(LOG_INFO,
+		     "OutputRoutingVisualizer: '%s' first frame received, linesize=%u sample BGR=%u,%u,%u",
+		     QT_TO_UTF8(col->title), frame->linesize[0], b0, b1, b2);
+	}
 
 	/* deep copy: the source buffer is only valid for the duration of this
 	 * callback, which runs on the video thread */

@@ -248,9 +248,15 @@ video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height)
 	ovi.output_width = out_width;
 	ovi.output_height = out_height;
 
+	blog(LOG_INFO,
+	     "obs_add_cropped_scaled_mix: src=%ux%u crop=%ux%u+%.0f,%.0f -> out=%ux%u",
+	     src_w, src_h, crop_w, crop_h, crop_x0, crop_y0, out_width, out_height);
+
 	struct obs_core_video_mix *mix = obs_create_video_mix(&ovi);
-	if (!mix)
+	if (!mix) {
+		blog(LOG_WARNING, "obs_add_cropped_scaled_mix: obs_create_video_mix failed");
 		return NULL;
+	}
 
 	mix->view = &canvas->view;
 	mix->render_output_filter = 0;
