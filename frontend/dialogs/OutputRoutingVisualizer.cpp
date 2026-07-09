@@ -235,7 +235,7 @@ QWidget *OutputRoutingVisualizer::MakeColumnWidget(RoutingColumn *col)
 
 	col->previewLabel = new QLabel(this);
 	col->previewLabel->setAlignment(Qt::AlignCenter);
-	col->previewLabel->setMinimumSize(kPreviewBoundW, kPreviewBoundH * 9 / 16);
+	col->previewLabel->setFixedSize(kPreviewBoundW, kPreviewBoundH * 9 / 16);
 	col->previewLabel->setStyleSheet(QStringLiteral("background-color: black;"));
 	col->previewLabel->setScaledContents(false);
 	layout->addWidget(col->previewLabel);
@@ -283,7 +283,7 @@ void OutputRoutingVisualizer::HookPreview(RoutingColumn *col, uint32_t boundW, u
 	col->previewW = w;
 	col->previewH = h;
 	if (col->previewLabel)
-		col->previewLabel->setMinimumSize((int)w, (int)h);
+		col->previewLabel->setFixedSize((int)w, (int)h);
 
 	struct video_scale_info conv = {};
 	conv.format = VIDEO_FORMAT_BGRA;
