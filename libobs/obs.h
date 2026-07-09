@@ -900,6 +900,19 @@ EXPORT void obs_add_raw_video_callback2(const struct video_scale_info *conversio
 					void (*callback)(void *param, struct video_data *frame), void *param);
 EXPORT void obs_remove_raw_video_callback(void (*callback)(void *param, struct video_data *frame), void *param);
 
+/** Like obs_add_raw_video_callback2(), but for an arbitrary video mix (e.g.
+ *  one returned by obs_add_output_filtered_mix() or
+ *  obs_add_cropped_scaled_mix()) instead of always the main canvas.
+ *  video_output_connect2() alone is not sufficient for a mix's frames to
+ *  actually be dispatched to the callback — the render loop in obs-video.c
+ *  gates raw delivery on the mix's raw_active refcount, which only this
+ *  (and obs_remove_raw_video_callback_mix()) maintain. */
+EXPORT void obs_add_raw_video_callback_mix(video_t *video, const struct video_scale_info *conversion,
+					   uint32_t frame_rate_divisor,
+					   void (*callback)(void *param, struct video_data *frame), void *param);
+EXPORT void obs_remove_raw_video_callback_mix(video_t *video, void (*callback)(void *param, struct video_data *frame),
+					      void *param);
+
 EXPORT void obs_add_raw_audio_callback(size_t mix_idx, const struct audio_convert_info *conversion,
 				       audio_output_callback_t callback, void *param);
 EXPORT void obs_remove_raw_audio_callback(size_t mix_idx, audio_output_callback_t callback, void *param);

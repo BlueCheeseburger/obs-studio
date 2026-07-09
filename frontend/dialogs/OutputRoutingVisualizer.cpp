@@ -31,7 +31,7 @@ static constexpr int kStatsIntervalMs = 1000;
 RoutingColumn::~RoutingColumn()
 {
 	if (hooked && video) {
-		video_output_disconnect2(video, &OutputRoutingVisualizer::RawVideoFrame, this);
+		obs_remove_raw_video_callback_mix(video, &OutputRoutingVisualizer::RawVideoFrame, this);
 		hooked = false;
 	}
 	if (ownsMix && video) {
@@ -300,7 +300,8 @@ void OutputRoutingVisualizer::HookPreview(RoutingColumn *col, uint32_t boundW, u
 	if (divisor < 1)
 		divisor = 1;
 
-	col->hooked = video_output_connect2(col->video, &conv, divisor, &OutputRoutingVisualizer::RawVideoFrame, col);
+	obs_add_raw_video_callback_mix(col->video, &conv, divisor, &OutputRoutingVisualizer::RawVideoFrame, col);
+	col->hooked = true;
 
 	blog(LOG_INFO,
 	     "OutputRoutingVisualizer: '%s' src=%ux%u preview=%ux%u divisor=%u hooked=%d",
