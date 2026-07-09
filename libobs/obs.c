@@ -3140,6 +3140,23 @@ void obs_add_raw_video_callback2(const struct video_scale_info *conversion, uint
 	start_raw_video(video->video, conversion, frame_rate_divisor, callback, param);
 }
 
+void obs_add_raw_video_callback_mix(video_t *video, const struct video_scale_info *conversion,
+				    uint32_t frame_rate_divisor,
+				    void (*callback)(void *param, struct video_data *frame), void *param)
+{
+	if (!video)
+		return;
+	start_raw_video(video, conversion, frame_rate_divisor, callback, param);
+}
+
+void obs_remove_raw_video_callback_mix(video_t *video, void (*callback)(void *param, struct video_data *frame),
+				       void *param)
+{
+	if (!video)
+		return;
+	stop_raw_video(video, callback, param);
+}
+
 void obs_remove_raw_video_callback(void (*callback)(void *param, struct video_data *frame), void *param)
 {
 	struct obs_core_video_mix *video = obs->data.main_canvas->mix;
