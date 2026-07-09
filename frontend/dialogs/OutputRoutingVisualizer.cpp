@@ -205,8 +205,8 @@ void OutputRoutingVisualizer::BuildStreamColumns()
 				 * Start Streaming. can_reuse_mix_texture() will let
 				 * this share render work with the real mix if/when
 				 * one is created with the exact same crop. */
-				video_t *preview = obs_add_cropped_scaled_mix((uint32_t)dest.width,
-										(uint32_t)dest.height);
+				video_t *preview = obs_add_cropped_scaled_mix((uint32_t)dest.width, (uint32_t)dest.height,
+									       OBS_SOURCE_OUTPUT_FILTER_STREAM);
 				if (preview) {
 					col->video = preview;
 					col->ownsMix = true;

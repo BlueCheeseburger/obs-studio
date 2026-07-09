@@ -198,7 +198,7 @@ video_t *obs_add_output_filtered_mix(uint32_t render_output_filter)
 	return mix->video;
 }
 
-video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height)
+video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height, uint32_t render_output_filter)
 {
 	obs_canvas_t *canvas = obs->data.main_canvas;
 	if (!canvas || !canvas->mix)
@@ -259,7 +259,7 @@ video_t *obs_add_cropped_scaled_mix(uint32_t out_width, uint32_t out_height)
 	}
 
 	mix->view = &canvas->view;
-	mix->render_output_filter = 0;
+	mix->render_output_filter = render_output_filter;
 	mix->has_crop = true;
 	mix->crop_x0 = crop_x0;
 	mix->crop_y0 = crop_y0;
