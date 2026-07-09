@@ -47,6 +47,7 @@ struct RoutingColumn {
 	QLabel *previewLabel = nullptr;
 	uint32_t previewW = 0;
 	uint32_t previewH = 0;
+	bool loggedFirstFrame = false;
 
 	/* Live stats, when this column has an active output driving it */
 	OBSWeakOutputAutoRelease weakOutput;

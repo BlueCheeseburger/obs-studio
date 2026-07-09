@@ -1460,10 +1460,16 @@ retryScene:
 	}
 
 	/* Sources (and their output filters) only exist now — the startup
-	 * ResetOutputs() ran before the collection loaded, so apply the
-	 * audio track routing here, before any auto-started output begins
-	 * consuming tracks. */
-	UpdateAudioOutputFilterRouting();
+	 * ResetOutputs() ran before the collection loaded and unconditionally
+	 * logged "No output-filtered sources", so the dedicated stream/record
+	 * video mixes were never created even though the loaded collection may
+	 * have filtered sources. The handler isn't active yet (auto-start, if
+	 * any, is still queued below), so it's safe to rebuild it now; this
+	 * also re-applies the audio track routing (ResetOutputs() does that
+	 * itself), before any auto-started output begins consuming tracks. */
+	blog(LOG_INFO, "Post-load: rebuilding output handler for %ld output-filtered source(s)",
+	     obs_output_filtered_source_count());
+	ResetOutputs();
 
 	/* One-shot: LoadData also runs when the user switches scene
 	 * collections mid-session, and auto-record must only fire for the
