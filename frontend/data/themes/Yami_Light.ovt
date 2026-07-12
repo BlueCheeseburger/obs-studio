@@ -134,6 +134,13 @@ VolumeControl.volume-preview .mixer-category {
     color: var(--text_light);
 }
 
+/* Subtractive audio source: audio removed from Desktop Audio rather than
+ * added. Red distinguishes it from the blue additive bar. */
+VolumeControl.volume-subtractive .mixer-category {
+    background: var(--red1);
+    color: var(--text_light);
+}
+
 QMenu::right-arrow {
     image: url(theme:Light/expand.svg);
 }

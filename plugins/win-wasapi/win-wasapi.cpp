@@ -165,6 +165,18 @@ class WASAPISource {
 	HWND hwnd = NULL;
 	DWORD process_id = 0;
 	const SourceType sourceType;
+
+	/* Desktop Audio (DeviceOutput) can optionally EXCLUDE an application's
+	 * process tree from the captured system audio (used by the subtractive
+	 * audio-source feature). Exclude mode is engaged when this is a
+	 * DeviceOutput source and a target window has been set via OPT_WINDOW.
+	 * When the target app is not running, capture falls back to the full
+	 * device loopback. */
+	bool ExcludeMode() const
+	{
+		return sourceType == SourceType::DeviceOutput &&
+		       (!window_class.empty() || !title.empty() || !executable.empty());
+	}
 	std::atomic<bool> useDeviceTiming = false;
 	std::atomic<bool> isDefaultDevice = false;
 	std::atomic<bool> sawBadTimestamp = false;
@@ -240,7 +252,8 @@ class WASAPISource {
 
 	static ComPtr<IMMDevice> InitDevice(IMMDeviceEnumerator *enumerator, bool isDefaultDevice, SourceType type,
 					    const string device_id);
-	static ComPtr<IAudioClient> InitClient(IMMDevice *device, SourceType type, DWORD process_id,
+	static ComPtr<IAudioClient> InitClient(IMMDevice *device, SourceType type, bool processLoopback,
+					       bool excludeProcessTree, DWORD process_id,
 					       PFN_ActivateAudioInterfaceAsync activate_audio_interface_async,
 					       speaker_layout &speakers, audio_format &format, uint32_t &sampleRate);
 	static void InitFormat(const WAVEFORMATEX *wfex, enum speaker_layout &speakers, enum audio_format &format,
@@ -546,7 +559,10 @@ void WASAPISource::Update(obs_data_t *settings)
 	const bool restart = (sourceType == SourceType::ProcessOutput)
 				     ? ((priority != params.priority) || (window_class != params.window_class) ||
 					(title != params.title) || (executable != params.executable))
-				     : (device_id.compare(params.device_id) != 0);
+				     : ((device_id.compare(params.device_id) != 0) ||
+					/* DeviceOutput exclude target (OPT_WINDOW) changed */
+					(priority != params.priority) || (window_class != params.window_class) ||
+					(title != params.title) || (executable != params.executable));
 
 	UpdateSettings(std::move(params));
 	LogSettings();
@@ -562,7 +578,10 @@ void WASAPISource::OnWindowChanged(obs_data_t *settings)
 	const bool restart = (sourceType == SourceType::ProcessOutput)
 				     ? ((priority != params.priority) || (window_class != params.window_class) ||
 					(title != params.title) || (executable != params.executable))
-				     : (device_id.compare(params.device_id) != 0);
+				     : ((device_id.compare(params.device_id) != 0) ||
+					/* DeviceOutput exclude target (OPT_WINDOW) changed */
+					(priority != params.priority) || (window_class != params.window_class) ||
+					(title != params.title) || (executable != params.executable));
 
 	UpdateSettings(std::move(params));
 
@@ -637,7 +656,8 @@ static DWORD GetSpeakerChannelMask(speaker_layout layout)
 	return (DWORD)layout;
 }
 
-ComPtr<IAudioClient> WASAPISource::InitClient(IMMDevice *device, SourceType type, DWORD process_id,
+ComPtr<IAudioClient> WASAPISource::InitClient(IMMDevice *device, SourceType type, bool processLoopback,
+					      bool excludeProcessTree, DWORD process_id,
 					      PFN_ActivateAudioInterfaceAsync activate_audio_interface_async,
 					      speaker_layout &speakers, audio_format &format, uint32_t &samples_per_sec)
 {
@@ -647,7 +667,7 @@ ComPtr<IAudioClient> WASAPISource::InitClient(IMMDevice *device, SourceType type
 	HRESULT res;
 	ComPtr<IAudioClient> client;
 
-	if (type == SourceType::ProcessOutput) {
+	if (processLoopback) {
 		if (activate_audio_interface_async == NULL)
 			throw "ActivateAudioInterfaceAsync is not available";
 
@@ -675,7 +695,8 @@ ComPtr<IAudioClient> WASAPISource::InitClient(IMMDevice *device, SourceType type
 		audioclientActivationParams.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
 		audioclientActivationParams.ProcessLoopbackParams.TargetProcessId = process_id;
 		audioclientActivationParams.ProcessLoopbackParams.ProcessLoopbackMode =
-			PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+			excludeProcessTree ? PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+					   : PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
 		PROPVARIANT activateParams{};
 		activateParams.vt = VT_BLOB;
 		activateParams.blob.cbSize = sizeof(audioclientActivationParams);
@@ -818,6 +839,8 @@ ComPtr<IAudioCaptureClient> WASAPISource::InitCapture(IAudioClient *client, HAND
 void WASAPISource::Initialize()
 {
 	ComPtr<IMMDevice> device;
+	bool processLoopback = false;
+	const bool excludeMode = ExcludeMode();
 	if (sourceType == SourceType::ProcessOutput) {
 		device_name = "[VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK]";
 
@@ -833,6 +856,24 @@ void WASAPISource::Initialize()
 		}
 
 		process_id = dwProcessId;
+		processLoopback = true;
+	} else if (excludeMode) {
+		/* Desktop Audio excluding an app: resolve the app's process
+		 * tree and capture everything except it. If the app is not
+		 * currently running there is nothing to exclude, so fall back
+		 * to normal full-device loopback. */
+		hwnd = ms_find_window(INCLUDE_MINIMIZED, priority, window_class.c_str(), title.c_str(),
+				      executable.c_str());
+		DWORD dwProcessId = 0;
+		if (hwnd && GetWindowThreadProcessId(hwnd, &dwProcessId) && dwProcessId) {
+			process_id = dwProcessId;
+			processLoopback = true;
+			device_name = "[VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK] (excluding target app)";
+		} else {
+			hwnd = NULL;
+			device = InitDevice(enumerator, isDefaultDevice, sourceType, device_id);
+			device_name = GetDeviceName(device);
+		}
 	} else {
 		device = InitDevice(enumerator, isDefaultDevice, sourceType, device_id);
 
@@ -841,9 +882,9 @@ void WASAPISource::Initialize()
 
 	ResetEvent(receiveSignal);
 
-	ComPtr<IAudioClient> temp_client = InitClient(device, sourceType, process_id, activate_audio_interface_async,
-						      speakers, format, sampleRate);
-	if (sourceType == SourceType::DeviceOutput)
+	ComPtr<IAudioClient> temp_client = InitClient(device, sourceType, processLoopback, excludeMode, process_id,
+						      activate_audio_interface_async, speakers, format, sampleRate);
+	if (sourceType == SourceType::DeviceOutput && !processLoopback)
 		ClearBuffer(device);
 	ComPtr<IAudioCaptureClient> temp_capture = InitCapture(temp_client, receiveSignal);
 

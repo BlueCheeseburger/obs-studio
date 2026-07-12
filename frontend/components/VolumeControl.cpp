@@ -590,11 +590,12 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 			a->setCheckable(true);
 			a->setChecked(curFilter == val);
 			OBSSource src = source;
-			connect(a, &QAction::triggered, this, [src, val]() {
+			connect(a, &QAction::triggered, this, [this, src, val]() {
 				OBSBasic *main = OBSBasic::Get();
 				obs_source_set_output_filter(src, val);
 				main->UpdateAudioOutputFilterRouting();
 				main->SaveProject();
+				updateCategoryLabel();
 
 				/* an active recording keeps consuming its old
 				 * track until it restarts */
@@ -607,6 +608,37 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 		makeOFAction("OutputFilter.StreamOnly", OBS_SOURCE_OUTPUT_FILTER_STREAM);
 		makeOFAction("OutputFilter.RecordOnly", OBS_SOURCE_OUTPUT_FILTER_RECORD);
 		popup->addMenu(outputFilterMenu);
+	}
+
+	/* Subtract from Desktop Audio — only for Application Audio Capture
+	 * sources. When enabled, the app is removed from Desktop Audio and the
+	 * Output Visibility above selects which output(s) it is subtracted
+	 * from (rather than added to). */
+	{
+		const char *srcId = obs_source_get_unversioned_id(source);
+		bool isProcessAudio = srcId && strcmp(srcId, "wasapi_process_output_capture") == 0;
+		if (isProcessAudio) {
+			OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+			bool subtractive = obs_data_get_bool(priv, "audio_subtract");
+
+			QAction *subAction = new QAction(QTStr("Basic.AudioMixer.Subtract"), popup);
+			subAction->setCheckable(true);
+			subAction->setChecked(subtractive);
+			OBSSource src = source;
+			connect(subAction, &QAction::triggered, this, [this, src](bool checked) {
+				OBSDataAutoRelease p = obs_source_get_private_settings(src);
+				obs_data_set_bool(p, "audio_subtract", checked);
+
+				OBSBasic *main = OBSBasic::Get();
+				main->UpdateAudioOutputFilterRouting();
+				main->SaveProject();
+				updateCategoryLabel();
+
+				if (main->Active())
+					main->ShowStatusBarMessage(QTStr("OutputFilter.AppliesAfterRestart"));
+			});
+			popup->addAction(subAction);
+		}
 	}
 
 	/* Noise Suppression submenu — only on mic sources (ones that have the
@@ -779,23 +811,37 @@ void VolumeControl::setLocked(bool locked)
 
 void VolumeControl::updateCategoryLabel()
 {
-	QString labelText = QTStr("Basic.AudioMixer.Category.Active");
-
-	if (mixerStatus().has(VolumeControl::MixerStatus::Unassigned)) {
-		labelText = QTStr("Basic.AudioMixer.Category.Unassigned");
-	} else if (mixerStatus().has(VolumeControl::MixerStatus::Global)) {
-		labelText = QTStr("Basic.AudioMixer.Category.Global");
-	} else if (mixerStatus().has(VolumeControl::MixerStatus::Pinned)) {
-		labelText = QTStr("Basic.AudioMixer.Category.Pinned");
-	} else if (mixerStatus().has(VolumeControl::MixerStatus::Hidden)) {
-		labelText = QTStr("Basic.AudioMixer.Category.Hidden");
-	} else if (!mixerStatus().has(VolumeControl::MixerStatus::Active)) {
-		labelText = QTStr("Basic.AudioMixer.Category.Inactive");
-
-		if (mixerStatus().has(VolumeControl::MixerStatus::Preview)) {
-			labelText = QTStr("Basic.AudioMixer.Category.Preview");
-		}
+	/* The category bar shows this source's Output Visibility (Both / Stream /
+	 * Recording) and is colored blue for a normal (additive) source or red
+	 * for a subtractive one. For a subtractive source the label names the
+	 * output(s) the audio is removed from; for an additive source, the
+	 * output(s) it is sent to. */
+	OBSSource source = OBSGetStrongRef(weakSource());
+	bool subtractive = false;
+	enum obs_source_output_filter filter = OBS_SOURCE_OUTPUT_FILTER_ALL;
+	if (source) {
+		OBSDataAutoRelease priv_settings = obs_source_get_private_settings(source);
+		subtractive = obs_data_get_bool(priv_settings, "audio_subtract");
+		filter = obs_source_get_output_filter(source);
 	}
+
+	QString labelText;
+	switch (filter) {
+	case OBS_SOURCE_OUTPUT_FILTER_STREAM:
+		labelText = QTStr("Basic.AudioMixer.Vis.Stream");
+		break;
+	case OBS_SOURCE_OUTPUT_FILTER_RECORD:
+		labelText = QTStr("Basic.AudioMixer.Vis.Recording");
+		break;
+	default:
+		labelText = QTStr("Basic.AudioMixer.Vis.Both");
+		break;
+	}
+
+	/* Unassigned (on no audio track) is an error state that overrides the
+	 * visibility text. */
+	if (mixerStatus().has(VolumeControl::MixerStatus::Unassigned))
+		labelText = QTStr("Basic.AudioMixer.Category.Unassigned");
 
 	bool stylePinned = mixerStatus().has(VolumeControl::MixerStatus::Global) ||
 			   mixerStatus().has(VolumeControl::MixerStatus::Pinned);
@@ -809,6 +855,7 @@ void VolumeControl::updateCategoryLabel()
 	utils->toggleClass("volume-preview", styleInactive && stylePreviewed);
 	utils->toggleClass("volume-hidden", styleHidden && !stylePinned);
 	utils->toggleClass("volume-unassigned", styleUnassigned);
+	utils->toggleClass("volume-subtractive", subtractive);
 
 	categoryLabel->setText(labelText);
 	categoryLabel->setAlignment(Qt::AlignCenter);

@@ -117,6 +117,32 @@ The dedicated stream/record render passes are only created while at least one so
 actually uses the feature — with no filtered sources, outputs encode straight from
 the main mix, so there is no GPU/VRAM overhead for setups that don't use it.
 
+### Subtractive audio sources (remove an app from Desktop Audio per-output)
+Add an **Application Audio Capture** source (e.g. a browser or music player), then
+right-click its strip in the Audio Mixer → **Subtract from Desktop Audio**. Instead of
+adding its own audio, the source is *removed* from Desktop Audio, and its
+**Output Visibility** selects which output(s) it is removed from:
+
+- **Recording** → app is dropped from the recording but stays on stream (e.g. keep
+  copyrighted music out of a VOD while you still hear it live).
+- **Stream** → app is dropped from the stream but stays in the recording.
+- **Both** → app is removed everywhere.
+
+The removal is clean, not phase-cancellation: Desktop Audio is captured in Windows'
+process-loopback **exclude** mode (capture everything *except* that app's process
+tree), and the app is re-added at its natural level only on the outputs it isn't
+subtracted from. The mixer strip's category bar turns **red** (vs. the normal blue) and
+shows which output(s) the source is subtracted from.
+
+Notes and limits:
+- Per-output subtraction (drop from one output but not the other) requires **Advanced**
+  output mode with separate stream/record tracks; in **Simple** mode the setting always
+  means "subtract from both".
+- Windows can exclude only **one** app process-tree from Desktop Audio at a time, so mark
+  a single source subtractive per Desktop Audio device.
+- Exclusion is applied when capture (re)starts and when you toggle the setting; an app
+  launched afterward is picked up on the next capture restart.
+
 ---
 
 ## Streaming
