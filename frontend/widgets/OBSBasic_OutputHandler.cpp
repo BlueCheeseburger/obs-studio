@@ -23,6 +23,56 @@
 
 #include <QDir>
 
+#include <cstring>
+#include <string>
+
+/* A subtractive audio source is an Application Audio Capture that the user has
+ * marked (via the mixer right-click menu) to be removed from Desktop Audio on
+ * one or more outputs, instead of adding its own audio. See
+ * UpdateAudioOutputFilterRouting(). */
+static bool source_is_subtractive_audio(obs_source_t *source)
+{
+	const char *id = obs_source_get_unversioned_id(source);
+	if (!id || strcmp(id, "wasapi_process_output_capture") != 0)
+		return false;
+	OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+	return obs_data_get_bool(priv, "audio_subtract");
+}
+
+/* Point every Desktop Audio (wasapi_output_capture) source at the given app
+ * window so its capture excludes that app's process tree. An empty window
+ * clears the exclusion, restoring full-system capture. Only updates sources
+ * whose target actually changed, to avoid needless capture restarts. */
+static void apply_desktop_audio_exclusion(const std::string &window, int priority)
+{
+	struct Ctx {
+		const std::string *window;
+		int priority;
+	} ctx{&window, priority};
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			auto *c = static_cast<Ctx *>(param);
+			const char *id = obs_source_get_unversioned_id(source);
+			if (!id || strcmp(id, "wasapi_output_capture") != 0)
+				return true;
+
+			OBSDataAutoRelease settings = obs_source_get_settings(source);
+			const char *cur = obs_data_get_string(settings, "window");
+			if (c->window->compare(cur ? cur : "") == 0)
+				return true;
+
+			OBSDataAutoRelease update = obs_data_create();
+			obs_data_set_string(update, "window", c->window->c_str());
+			obs_data_set_int(update, "priority", c->priority);
+			obs_source_update(source, update);
+			blog(LOG_INFO, "Subtractive audio: Desktop Audio '%s' now excludes '%s'",
+			     obs_source_get_name(source), c->window->empty() ? "(none)" : c->window->c_str());
+			return true;
+		},
+		&ctx);
+}
+
 /* Audio counterpart of the per-source Output Visibility feature. The video
  * side renders separate stream/record mixes; audio separation works through
  * mixer tracks instead: the stream output consumes its configured track and
@@ -33,14 +83,76 @@
  * the game sound with a capture-latency echo. */
 void OBSBasic::UpdateAudioOutputFilterRouting()
 {
-	if (obs_output_filtered_source_count() == 0)
+	/* First, reconcile which app (if any) Desktop Audio should exclude,
+	 * based on subtractive audio sources. Run unconditionally so that
+	 * un-marking the last subtractive source restores full Desktop Audio. */
+	std::string excludeWindow;
+	int excludePriority = 0;
+	int subtractiveCount = 0;
+	{
+		struct FindCtx {
+			std::string *window;
+			int *priority;
+			int *count;
+		} fc{&excludeWindow, &excludePriority, &subtractiveCount};
+
+		obs_enum_sources(
+			[](void *param, obs_source_t *source) {
+				auto *c = static_cast<FindCtx *>(param);
+				if (!source_is_subtractive_audio(source))
+					return true;
+				(*c->count)++;
+				if (c->window->empty()) {
+					OBSDataAutoRelease st = obs_source_get_settings(source);
+					const char *w = obs_data_get_string(st, "window");
+					if (w)
+						*c->window = w;
+					*c->priority = (int)obs_data_get_int(st, "priority");
+				}
+				return true;
+			},
+			&fc);
+	}
+
+	apply_desktop_audio_exclusion(excludeWindow, excludePriority);
+
+	if (subtractiveCount > 1)
+		blog(LOG_WARNING,
+		     "Subtractive audio: %d sources are marked subtractive, but Windows can exclude only "
+		     "one app tree from Desktop Audio; only the first is excluded",
+		     subtractiveCount);
+
+	const bool anyFilter = obs_output_filtered_source_count() > 0;
+	if (!anyFilter && subtractiveCount == 0)
 		return;
 
 	const char *mode = config_get_string(activeConfiguration, "Output", "Mode");
 	bool adv = astrcmpi(mode, "Advanced") == 0;
+
 	if (!adv) {
-		blog(LOG_WARNING, "Audio output separation: sources have stream-only/record-only "
-				  "filters, but audio separation requires Advanced output mode");
+		/* Simple output mode shares one audio track, so per-output
+		 * separation is impossible. Subtractive sources still work as
+		 * "subtract from both": Desktop Audio already excludes the app,
+		 * and we mute the app source from the single output track so it
+		 * is not re-added. */
+		if (subtractiveCount > 0) {
+			obs_enum_sources(
+				[](void *, obs_source_t *source) {
+					if (source_is_subtractive_audio(source) &&
+					    obs_source_get_audio_mixers(source) != 0) {
+						obs_source_set_audio_mixers(source, 0);
+						blog(LOG_INFO,
+						     "Subtractive audio (Simple mode): '%s' muted from output "
+						     "(subtracted from both)",
+						     obs_source_get_name(source));
+					}
+					return true;
+				},
+				nullptr);
+		}
+		if (anyFilter)
+			blog(LOG_WARNING, "Audio output separation: sources have stream-only/record-only "
+					  "filters, but per-output separation requires Advanced output mode");
 		return;
 	}
 
@@ -78,24 +190,48 @@ void OBSBasic::UpdateAudioOutputFilterRouting()
 			uint32_t mixers = obs_source_get_audio_mixers(source);
 			uint32_t want;
 
-			switch (obs_source_get_output_filter(source)) {
-			case OBS_SOURCE_OUTPUT_FILTER_STREAM:
-				want = c->streamMask;
-				break;
-			case OBS_SOURCE_OUTPUT_FILTER_RECORD:
-				want = c->recMask;
-				break;
-			default:
-				/* unfiltered: make sure it reaches both outputs,
-				 * keeping any extra tracks the user assigned */
-				want = mixers | c->streamMask | c->recMask;
-				break;
+			if (source_is_subtractive_audio(source)) {
+				/* A subtractive source's output filter names WHERE
+				 * the app is subtracted; its own audio is routed
+				 * to the complement (the outputs where the app
+				 * should remain, re-adding it at its natural
+				 * level). Desktop Audio excludes the app on every
+				 * track, so the app is present only where this
+				 * source re-adds it. */
+				switch (obs_source_get_output_filter(source)) {
+				case OBS_SOURCE_OUTPUT_FILTER_STREAM:
+					/* subtracted from stream -> keep on recording */
+					want = c->recMask;
+					break;
+				case OBS_SOURCE_OUTPUT_FILTER_RECORD:
+					/* subtracted from recording -> keep on stream */
+					want = c->streamMask;
+					break;
+				default:
+					/* subtracted from both -> nowhere */
+					want = 0;
+					break;
+				}
+			} else {
+				switch (obs_source_get_output_filter(source)) {
+				case OBS_SOURCE_OUTPUT_FILTER_STREAM:
+					want = c->streamMask;
+					break;
+				case OBS_SOURCE_OUTPUT_FILTER_RECORD:
+					want = c->recMask;
+					break;
+				default:
+					/* unfiltered: make sure it reaches both
+					 * outputs, keeping any extra tracks the
+					 * user assigned */
+					want = mixers | c->streamMask | c->recMask;
+					break;
+				}
 			}
 
 			if (want != mixers) {
 				obs_source_set_audio_mixers(source, want);
-				blog(LOG_INFO,
-				     "Audio output separation: '%s' tracks 0x%X -> 0x%X",
+				blog(LOG_INFO, "Audio output separation: '%s' tracks 0x%X -> 0x%X",
 				     obs_source_get_name(source), mixers, want);
 			}
 			return true;

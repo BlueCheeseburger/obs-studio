@@ -1954,6 +1954,14 @@ VolumeControl.volume-preview .mixer-category {
     color: var(--green1);
 }
 
+/* Subtractive audio source: its audio is removed from Desktop Audio on the
+ * output(s) named by the label, rather than added. Red distinguishes it from
+ * the blue additive bar. */
+VolumeControl.volume-subtractive .mixer-category {
+    background: var(--red6);
+    color: var(--red1);
+}
+
 #stackedMixerArea VolumeControl.volume-hidden QSlider::groove,
 #stackedMixerArea VolumeControl.volume-inactive QSlider::groove {
     background: var(--grey8);
