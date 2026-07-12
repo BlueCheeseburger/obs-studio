@@ -50,7 +50,8 @@ static constexpr float kAudioActivityMinStdDb = 3.0f;  /* min level variation to
 /* file probe tuning */
 static constexpr double kFileFpsFactor = 0.70;    /* PTS gaps: second is "bad" below 70% of nominal */
 static constexpr int kFileMinBadSeconds = 5;      /* PTS gaps: alert at this many bad seconds */
-static constexpr int kContentPacketBytes = 1024;  /* packets above this carry real content */
+static constexpr int kContentPacketBytes = 1024;  /* fallback if too few packets to self-calibrate */
+static constexpr uint32_t kContentFloorMultiplier = 4; /* content floor = 4x this file's 10th-pct packet size */
 static constexpr int kBaselineSeconds = 180;      /* self-baseline window at file start */
 static constexpr double kCollapseFactor = 0.50;   /* "collapsed" = below half the baseline */
 static constexpr int kCollapseMinRun = 30;        /* alert on this many consecutive bad s */
@@ -396,9 +397,17 @@ static ProbeResult probe_file(const QString &path, double nominalFps)
 
 	/* per second of presentation time: all packets + content packets
 	 * (frozen duplicate frames encode to near-empty delta packets, so
-	 * packets above a small size floor approximate real picture updates) */
+	 * packets above a size floor approximate real picture updates).
+	 * The floor is derived from this file's OWN packet sizes rather than
+	 * a fixed byte count: a truly-empty/duplicate frame at any
+	 * resolution, bitrate, or codec compresses close to this file's own
+	 * smallest packets, while a fixed absolute threshold (e.g. 1024
+	 * bytes) misclassifies genuinely fresh but visually simple frames
+	 * (e.g. open sky) as duplicates, especially with efficient codecs
+	 * like AV1. */
 	std::vector<uint32_t> total;
-	std::vector<uint32_t> content;
+	std::vector<std::vector<uint32_t>> secondSizes;
+	std::vector<uint32_t> allSizes;
 	double tb = av_q2d(stream->time_base);
 
 	AVPacket *pkt = av_packet_alloc();
@@ -411,11 +420,11 @@ static ProbeResult probe_file(const QString &path, double nominalFps)
 					size_t idx = (size_t)sec;
 					if (total.size() <= idx) {
 						total.resize(idx + 1, 0);
-						content.resize(idx + 1, 0);
+						secondSizes.resize(idx + 1);
 					}
 					total[idx]++;
-					if (pkt->size > kContentPacketBytes)
-						content[idx]++;
+					secondSizes[idx].push_back((uint32_t)pkt->size);
+					allSizes.push_back((uint32_t)pkt->size);
 				}
 			}
 		}
@@ -423,6 +432,22 @@ static ProbeResult probe_file(const QString &path, double nominalFps)
 	}
 	av_packet_free(&pkt);
 	avformat_close_input(&fmt);
+
+	uint32_t contentThreshold = kContentPacketBytes;
+	if (allSizes.size() >= 100) {
+		std::vector<uint32_t> sorted = allSizes;
+		std::sort(sorted.begin(), sorted.end());
+		uint32_t floorBytes = sorted[sorted.size() / 10]; /* 10th percentile */
+		contentThreshold = std::max<uint32_t>(64, floorBytes * kContentFloorMultiplier);
+	}
+
+	std::vector<uint32_t> content(secondSizes.size(), 0);
+	for (size_t i = 0; i < secondSizes.size(); i++) {
+		for (uint32_t sz : secondSizes[i]) {
+			if (sz > contentThreshold)
+				content[i]++;
+		}
+	}
 
 	/* skip the first and last second (partial buckets) */
 	if (total.size() < 4)
