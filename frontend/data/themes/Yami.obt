@@ -1914,12 +1914,15 @@ VolumeControl #volLabel {
 }
 
 VolumeControl.volume-inactive,
-VolumeControl.volume-inactive VolumeMeter {
+VolumeControl.volume-inactive VolumeMeter,
+VolumeControl.volume-subtract-noop,
+VolumeControl.volume-subtract-noop VolumeMeter {
     background: var(--grey7);
 }
 
 VolumeControl.volume-hidden .mixer-name,
-VolumeControl.volume-inactive .mixer-name {
+VolumeControl.volume-inactive .mixer-name,
+VolumeControl.volume-subtract-noop .mixer-name {
     color: var(--text_muted);
 }
 
@@ -1963,7 +1966,8 @@ VolumeControl.volume-subtractive .mixer-category {
 }
 
 #stackedMixerArea VolumeControl.volume-hidden QSlider::groove,
-#stackedMixerArea VolumeControl.volume-inactive QSlider::groove {
+#stackedMixerArea VolumeControl.volume-inactive QSlider::groove,
+#stackedMixerArea VolumeControl.volume-subtract-noop QSlider::groove {
     background: var(--grey8);
 }
 
