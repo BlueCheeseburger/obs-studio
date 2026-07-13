@@ -76,7 +76,9 @@
 }
 
 VolumeControl.volume-inactive,
-VolumeControl.volume-inactive VolumeMeter {
+VolumeControl.volume-inactive VolumeMeter,
+VolumeControl.volume-subtract-noop,
+VolumeControl.volume-subtract-noop VolumeMeter {
     background: var(--grey8);
 }
 

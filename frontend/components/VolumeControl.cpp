@@ -981,7 +981,13 @@ void VolumeControl::updateMixerState()
 	bool subtractive = obs_data_get_bool(priv, "audio_subtract");
 	bool unassigned = onNoTracks && !subtractive;
 
-	muteButton->setVisible(!(subtractive && onNoTracks));
+	/* A source subtracted from both outputs feeds no output track — its
+	 * fader/meter are grey the same way an inactive source is, since
+	 * moving them has no effect on anything being streamed or recorded. */
+	bool subtractNoOutput = subtractive && onNoTracks;
+
+	muteButton->setVisible(!subtractNoOutput);
+	utils->toggleClass("volume-subtract-noop", subtractNoOutput);
 
 	bool isActive = obs_source_active(source) && obs_source_audio_active(source);
 
@@ -995,8 +1001,8 @@ void VolumeControl::updateMixerState()
 	bool showAsMonitored = !muted && monitoringType != OBS_MONITORING_TYPE_NONE;
 	bool showAsUnassigned = !muted && unassigned;
 
-	volumeMeter->setMuted((showAsMuted || showAsUnassigned) && !showAsMonitored);
-	setUseDisabledColors(showAsMuted || !isActive);
+	volumeMeter->setMuted((showAsMuted || showAsUnassigned || subtractNoOutput) && !showAsMonitored);
+	setUseDisabledColors(showAsMuted || !isActive || subtractNoOutput);
 
 	muteButton->setChecked(showAsMuted);
 	monitorButton->setChecked(showAsMonitored);
