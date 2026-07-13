@@ -202,6 +202,15 @@ void OBSBasic::WarnIfAudioSourcesExcludedFromRecording()
 			 * a track assignment — nothing to warn about. */
 			if (obs_source_get_output_filter(source) == OBS_SOURCE_OUTPUT_FILTER_STREAM)
 				return true;
+			/* A subtractive audio source deliberately sits on no track
+			 * (or only the stream's track) when it is being subtracted
+			 * from the recording — that is the feature working as
+			 * intended, not a missing-audio mistake. */
+			{
+				OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+				if (obs_data_get_bool(priv, "audio_subtract"))
+					return true;
+			}
 			uint32_t mixers = obs_source_get_audio_mixers(source);
 			if ((mixers & c->recMask) == 0)
 				c->excluded.append(QT_UTF8(obs_source_get_name(source)));
