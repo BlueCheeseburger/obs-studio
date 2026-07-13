@@ -595,7 +595,7 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 				obs_source_set_output_filter(src, val);
 				main->UpdateAudioOutputFilterRouting();
 				main->SaveProject();
-				updateCategoryLabel();
+				updateMixerState();
 
 				/* an active recording keeps consuming its old
 				 * track until it restarts */
@@ -632,7 +632,7 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 				OBSBasic *main = OBSBasic::Get();
 				main->UpdateAudioOutputFilterRouting();
 				main->SaveProject();
-				updateCategoryLabel();
+				updateMixerState();
 
 				if (main->Active())
 					main->ShowStatusBarMessage(QTStr("OutputFilter.AppliesAfterRestart"));
@@ -970,8 +970,18 @@ void VolumeControl::updateMixerState()
 	}
 
 	bool muted = obs_source_muted(source);
-	bool unassigned = isSourceUnassigned(source);
+	bool onNoTracks = isSourceUnassigned(source);
 	obs_monitoring_type monitoringType = obs_source_get_monitoring_type(source);
+
+	/* A subtractive source deliberately sits on no output track when it is
+	 * subtracted from both outputs; that is intentional, not the accidental
+	 * "unassigned" error state, so don't flag it as unassigned. Its mute
+	 * button is useless in that case (it feeds no output), so hide it. */
+	OBSDataAutoRelease priv = obs_source_get_private_settings(source);
+	bool subtractive = obs_data_get_bool(priv, "audio_subtract");
+	bool unassigned = onNoTracks && !subtractive;
+
+	muteButton->setVisible(!(subtractive && onNoTracks));
 
 	bool isActive = obs_source_active(source) && obs_source_audio_active(source);
 
