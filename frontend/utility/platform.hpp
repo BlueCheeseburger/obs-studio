@@ -69,6 +69,15 @@ void TaskbarButtonsSetState(bool recording, int elapsedSeconds = -1);
  * Registering the task requires OBS to currently be running elevated. */
 bool IsLaunchAtLoginEnabled();
 bool SetLaunchAtLogin(bool enable, std::string &error);
+
+/* Cross-process signal used when a duplicate launch attempt auto-cancels
+ * itself (see the "OBS is already running" prompt in obs-main.cpp): tells
+ * the already-running instance to stop any flashing tray-icon health alert,
+ * since an unattended duplicate-launch attempt usually means the user isn't
+ * looking at this machine right now and a flashing tray icon left going
+ * indefinitely isn't useful. */
+void SignalClearTrayAlert();
+bool CheckAndClearTrayAlertSignal();
 #endif
 
 #ifdef _WIN32

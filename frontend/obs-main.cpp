@@ -36,6 +36,7 @@
 #include <QFontDatabase>
 #include <QProcess>
 #include <QPushButton>
+#include <QTimer>
 #include <curl/curl.h>
 
 #include <fstream>
@@ -543,8 +544,26 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 			QPushButton *cancelButton = mb.addButton(QTStr("Cancel"), QMessageBox::NoRole);
 			mb.setDefaultButton(cancelButton);
 
+			/* Don't leave this modal stuck forever if nobody is at the
+			 * keyboard: auto-cancel after 30s of no interaction, same as
+			 * clicking Cancel (the default button). An unattended duplicate
+			 * launch also means nobody is watching the already-running
+			 * instance's tray icon right now, so also clear any flashing
+			 * health-alert tray icon it may be showing. */
+			bool autoTimedOut = false;
+#ifdef _WIN32
+			QTimer::singleShot(30000, &mb, [&autoTimedOut, cancelButton]() {
+				autoTimedOut = true;
+				cancelButton->click();
+			});
+#endif
+
 			mb.exec();
 			cancel_launch = mb.clickedButton() == cancelButton;
+#ifdef _WIN32
+			if (autoTimedOut)
+				SignalClearTrayAlert();
+#endif
 		}
 
 		if (cancel_launch)

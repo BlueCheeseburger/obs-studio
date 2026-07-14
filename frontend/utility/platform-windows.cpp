@@ -328,6 +328,69 @@ RunOnceMutex CheckIfAlreadyRunning(bool &already_running)
 	return rom;
 }
 
+/* Same naming scheme as the run-once mutex above (name kept stable per
+ * install/portable-path so unrelated OBS installs on the same machine don't
+ * cross-signal each other). */
+static BPtr<wchar_t> GetTrayAlertEventName()
+{
+	string name;
+
+	if (!portable_mode) {
+		name = "OBSStudioCoreClearTrayAlert";
+	} else {
+		char path[500];
+		char absPath[512];
+		*path = 0;
+		*absPath = 0;
+		GetAppConfigPath(path, sizeof(path), "");
+		os_get_abs_path(path, absPath, sizeof(absPath));
+		name = "OBSStudioPortableClearTrayAlert";
+		name += absPath;
+	}
+
+	BPtr<wchar_t> wname;
+	os_utf8_to_wcs_ptr(name.c_str(), name.size(), &wname);
+
+	if (wname) {
+		wchar_t *temp = wname;
+		while (*temp) {
+			if (!iswalnum(*temp))
+				*temp = L'_';
+			temp++;
+		}
+	}
+
+	return wname;
+}
+
+void SignalClearTrayAlert()
+{
+	BPtr<wchar_t> wname = GetTrayAlertEventName();
+	if (!wname)
+		return;
+
+	WinHandle h = OpenEventW(EVENT_MODIFY_STATE, false, wname.Get());
+	if (h)
+		SetEvent(h);
+}
+
+bool CheckAndClearTrayAlertSignal()
+{
+	/* Auto-reset event: WaitForSingleObject consumes the signal, so a poll
+	 * returning true fires exactly once per SignalClearTrayAlert() call. */
+	static WinHandle event;
+	if (!event.Valid()) {
+		BPtr<wchar_t> wname = GetTrayAlertEventName();
+		if (!wname)
+			return false;
+		event = CreateEventW(nullptr, false, false, wname.Get());
+		if (!event)
+			return false;
+	}
+
+	return WaitForSingleObject(event, 0) == WAIT_OBJECT_0;
+}
+
 struct MonitorData {
 	const wchar_t *id;
 	MONITORINFOEX info;
