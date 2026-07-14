@@ -65,6 +65,18 @@ void OBSBasic::SystemTrayInit()
 	trayIcon->setContextMenu(trayMenu);
 	trayIcon->show();
 
+#ifdef _WIN32
+	/* A duplicate launch attempt that auto-cancels itself unattended (see
+	 * the "OBS is already running" prompt) signals this instance to stop
+	 * any flashing health-alert tray icon — see SignalClearTrayAlert(). */
+	auto *clearAlertPoll = new QTimer(this);
+	connect(clearAlertPoll, &QTimer::timeout, this, [this]() {
+		if (CheckAndClearTrayAlertSignal())
+			StopTrayAlertFlash();
+	});
+	clearAlertPoll->start(1000);
+#endif
+
 	if (outputHandler && !outputHandler->replayBuffer)
 		sysTrayReplayBuffer->setEnabled(false);
 
