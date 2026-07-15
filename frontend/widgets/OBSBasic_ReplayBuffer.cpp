@@ -129,6 +129,8 @@ void OBSBasic::ReplayBufferStart()
 
 	emit ReplayBufStarted();
 
+	WarnIfAudioSourcesExcludedFromRecording(outputHandler->replayBuffer, QStringLiteral("replay buffer"));
+
 	if (sysTrayReplayBuffer)
 		sysTrayReplayBuffer->setText(QTStr("Basic.Main.StopReplayBuffer"));
 

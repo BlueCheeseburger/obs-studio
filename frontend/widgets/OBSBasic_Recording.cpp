@@ -154,9 +154,8 @@ void OBSBasic::StopRecording()
 	OnDeactivate();
 }
 
-void OBSBasic::WarnIfAudioSourcesExcludedFromRecording()
+void OBSBasic::WarnIfAudioSourcesExcludedFromRecording(obs_output_t *out, const QString &context)
 {
-	obs_output_t *out = outputHandler ? (obs_output_t *)outputHandler->fileOutput : nullptr;
 	if (!out)
 		return;
 
@@ -223,19 +222,19 @@ void OBSBasic::WarnIfAudioSourcesExcludedFromRecording()
 
 	QString names = ctx.excluded.join(QStringLiteral(", "));
 	blog(LOG_WARNING,
-	     "Recording: the following audible audio source(s) are NOT being recorded "
-	     "(excluded from every recorded audio track): %s",
-	     QT_TO_UTF8(names));
+	     "%s: the following audible audio source(s) are NOT being captured "
+	     "(excluded from every %s audio track): %s",
+	     QT_TO_UTF8(context), QT_TO_UTF8(context), QT_TO_UTF8(names));
 
-	ShowStatusBarMessage(QTStr("Basic.Recording.AudioExcludedWarning").arg(names));
+	ShowStatusBarMessage(QTStr("Basic.Recording.AudioExcludedWarning").arg(names).arg(context));
 
 	/* This is data loss in progress, so make it impossible to miss. Shown
-	 * non-blocking; the recording keeps running. */
+	 * non-blocking; the recording/replay buffer keeps running. */
 	QMessageBox *box = new QMessageBox(this);
 	box->setAttribute(Qt::WA_DeleteOnClose);
 	box->setIcon(QMessageBox::Warning);
-	box->setWindowTitle(QTStr("Basic.Recording.AudioExcludedWarning.Title"));
-	box->setText(QTStr("Basic.Recording.AudioExcludedWarning.Text").arg(names));
+	box->setWindowTitle(QTStr("Basic.Recording.AudioExcludedWarning.Title").arg(context));
+	box->setText(QTStr("Basic.Recording.AudioExcludedWarning.Text").arg(names).arg(context));
 	box->setStandardButtons(QMessageBox::Ok);
 	box->setModal(false);
 	box->show();
@@ -246,7 +245,8 @@ void OBSBasic::RecordingStart()
 	ui->statusbar->RecordingStarted(outputHandler->fileOutput);
 	emit RecordingStarted(isRecordingPausable);
 
-	WarnIfAudioSourcesExcludedFromRecording();
+	if (outputHandler)
+		WarnIfAudioSourcesExcludedFromRecording(outputHandler->fileOutput, QStringLiteral("recording"));
 
 	if (sysTrayRecord)
 		sysTrayRecord->setText(QTStr("Basic.Main.StopRecording"));

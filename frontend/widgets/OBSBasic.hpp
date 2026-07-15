@@ -1087,7 +1087,7 @@ public slots:
 	/* Safety net: warns if an audible audio source can't reach any track the
 	 * recording is actually encoding (e.g. it was excluded from the mixer
 	 * tracks). Reads the live output so it is correct in every output mode. */
-	void WarnIfAudioSourcesExcludedFromRecording();
+	void WarnIfAudioSourcesExcludedFromRecording(obs_output_t *out, const QString &context);
 
 signals:
 	/* Recording signals */
