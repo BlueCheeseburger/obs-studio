@@ -448,6 +448,8 @@ public slots:
 private:
 	QPointer<QDockWidget> statsDock;
 	QByteArray startingDockLayout;
+	/* Last dock layout persisted by the periodic saver; see OBSInit(). */
+	QByteArray lastSavedDockState;
 	QStringList extraDockNames;
 	QList<std::shared_ptr<QDockWidget>> extraDocks;
 
@@ -1088,6 +1090,11 @@ public slots:
 	 * recording is actually encoding (e.g. it was excluded from the mixer
 	 * tracks). Reads the live output so it is correct in every output mode. */
 	void WarnIfAudioSourcesExcludedFromRecording(obs_output_t *out, const QString &context);
+
+public slots:
+	void AutoNameProcessAudioSources();
+
+public:
 
 signals:
 	/* Recording signals */

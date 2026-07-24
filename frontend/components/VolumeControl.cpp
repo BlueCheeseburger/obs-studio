@@ -626,6 +626,42 @@ void VolumeControl::showVolumeControlMenu(QPoint pos)
 			subAction->setChecked(subtractive);
 			OBSSource src = source;
 			connect(subAction, &QAction::triggered, this, [this, src](bool checked) {
+				/* Windows can exclude only ONE process tree from a
+				 * Desktop Audio capture, so a second subtractive
+				 * source cannot actually be subtracted. Warn rather
+				 * than silently doing nothing. */
+				if (checked) {
+					struct FindOther {
+						obs_source_t *self;
+						QString name;
+					} fo{src, {}};
+
+					obs_enum_sources(
+						[](void *param, obs_source_t *s) {
+							auto *f = static_cast<FindOther *>(param);
+							if (s == f->self || !f->name.isEmpty())
+								return true;
+							const char *id = obs_source_get_unversioned_id(s);
+							if (!id || strcmp(id, "wasapi_process_output_capture") != 0)
+								return true;
+							OBSDataAutoRelease p = obs_source_get_private_settings(s);
+							if (obs_data_get_bool(p, "audio_subtract"))
+								f->name = QT_UTF8(obs_source_get_name(s));
+							return true;
+						},
+						&fo);
+
+					if (!fo.name.isEmpty()) {
+						QMessageBox box(this);
+						box.setIcon(QMessageBox::Warning);
+						box.setWindowTitle(QTStr("Basic.AudioMixer.Subtract.MultiWarn.Title"));
+						box.setText(QTStr("Basic.AudioMixer.Subtract.MultiWarn.Text")
+								    .arg(fo.name));
+						box.setStandardButtons(QMessageBox::Ok);
+						box.exec();
+					}
+				}
+
 				OBSDataAutoRelease p = obs_source_get_private_settings(src);
 				obs_data_set_bool(p, "audio_subtract", checked);
 
