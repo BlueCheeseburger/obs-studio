@@ -51,6 +51,12 @@
 #include <QDesktopServices>
 
 #ifdef _WIN32
+#include <util/windows/window-helpers.h>
+#include <cctype>
+#include <string>
+#endif
+
+#ifdef _WIN32
 #include <sstream>
 #endif
 
@@ -95,6 +101,90 @@ void OBSBasic::CreatePropertiesWindow(obs_source_t *source)
 	properties = new OBSBasicProperties(this, source);
 	properties->Init();
 	properties->setAttribute(Qt::WA_DeleteOnClose, true);
+
+	/* Picking a different app in an Application Audio Capture source should
+	 * refresh its auto-generated name. */
+	connect(properties, &QObject::destroyed, this, &OBSBasic::AutoNameProcessAudioSources);
+}
+
+/* Application Audio Capture sources are all created with the same generic
+ * name ("Application Audio Capture (BETA)", "... 2", ...), which is useless in
+ * the mixer once you have more than one. Rename any still carrying that
+ * default to the executable they capture (chrome.exe -> "chrome"). Sources the
+ * user has renamed themselves are left alone. */
+void OBSBasic::AutoNameProcessAudioSources()
+{
+#ifdef _WIN32
+	const char *defaultName = obs_source_get_display_name("wasapi_process_output_capture");
+	if (!defaultName)
+		return;
+
+	struct Ctx {
+		const char *defaultName;
+		size_t defaultLen;
+	} ctx{defaultName, strlen(defaultName)};
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			auto *c = static_cast<Ctx *>(param);
+
+			const char *id = obs_source_get_unversioned_id(source);
+			if (!id || strcmp(id, "wasapi_process_output_capture") != 0)
+				return true;
+
+			/* only touch sources still using the generic default name
+			 * (optionally with OBS's " 2"/" 3" uniquifying suffix) */
+			const char *name = obs_source_get_name(source);
+			if (!name || strncmp(name, c->defaultName, c->defaultLen) != 0)
+				return true;
+
+			OBSDataAutoRelease settings = obs_source_get_settings(source);
+			const char *window = obs_data_get_string(settings, "window");
+			if (!window || !*window)
+				return true;
+
+			char *window_class = nullptr;
+			char *title = nullptr;
+			char *executable = nullptr;
+			ms_build_window_strings(window, &window_class, &title, &executable);
+
+			std::string base;
+			if (executable && *executable) {
+				base = executable;
+				/* drop a trailing ".exe" for readability */
+				if (base.size() > 4) {
+					std::string tail = base.substr(base.size() - 4);
+					for (char &ch : tail)
+						ch = (char)tolower((unsigned char)ch);
+					if (tail == ".exe")
+						base.resize(base.size() - 4);
+				}
+			}
+
+			bfree(window_class);
+			bfree(title);
+			bfree(executable);
+
+			if (base.empty() || base == name)
+				return true;
+
+			/* source names must be unique */
+			std::string unique = base;
+			for (int i = 2; i < 100; i++) {
+				OBSSourceAutoRelease existing = obs_get_source_by_name(unique.c_str());
+				if (!existing)
+					break;
+				if (existing == source)
+					return true; /* already named this */
+				unique = base + " " + std::to_string(i);
+			}
+
+			blog(LOG_INFO, "Auto-named application audio source '%s' -> '%s'", name, unique.c_str());
+			obs_source_set_name(source, unique.c_str());
+			return true;
+		},
+		&ctx);
+#endif
 }
 
 void OBSBasic::CreateFiltersWindow(obs_source_t *source)

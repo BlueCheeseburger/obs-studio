@@ -1250,6 +1250,25 @@ void OBSBasic::OBSInit()
 			on_resetDocks_triggered(true);
 	}
 
+	/* Persist the dock layout (dock sizes and positions) periodically rather
+	 * than only from saveAll() during a clean shutdown — an unclean exit
+	 * (crash, force-kill, OS session end) would otherwise silently discard
+	 * every dock resize made during the session. Only writes when the layout
+	 * actually changed. */
+	lastSavedDockState = saveState().toBase64();
+	QTimer *dockSaveTimer = new QTimer(this);
+	connect(dockSaveTimer, &QTimer::timeout, this, [this]() {
+		if (isClosing())
+			return;
+		QByteArray state = saveState().toBase64();
+		if (state == lastSavedDockState)
+			return;
+		lastSavedDockState = state;
+		config_set_string(App()->GetUserConfig(), "BasicWindow", "DockState", state.constData());
+		config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
+	});
+	dockSaveTimer->start(15000);
+
 	bool pre23Defaults = config_get_bool(App()->GetUserConfig(), "General", "Pre23Defaults");
 	if (pre23Defaults) {
 		bool resetDockLock23 = config_get_bool(App()->GetUserConfig(), "General", "ResetDockLock23");

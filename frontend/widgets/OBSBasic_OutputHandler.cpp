@@ -25,6 +25,11 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
+
+#ifdef _WIN32
+#include <util/windows/window-helpers.h>
+#endif
 
 /* A subtractive audio source is an Application Audio Capture that the user has
  * marked (via the mixer right-click menu) to be removed from Desktop Audio on
@@ -37,6 +42,36 @@ static bool source_is_subtractive_audio(obs_source_t *source)
 		return false;
 	OBSDataAutoRelease priv = obs_source_get_private_settings(source);
 	return obs_data_get_bool(priv, "audio_subtract");
+}
+
+/* Whether a subtractive source's saved window target currently resolves to a
+ * live window. Windows can only exclude ONE process tree from a Desktop Audio
+ * capture, so the single exclusion slot must not be wasted on an app that
+ * isn't running — otherwise the capture silently falls back to full-system
+ * audio and NOTHING gets subtracted. */
+static bool subtractive_target_resolves(const std::string &window, int priority)
+{
+#ifdef _WIN32
+	if (window.empty())
+		return false;
+
+	char *window_class = nullptr;
+	char *title = nullptr;
+	char *executable = nullptr;
+	ms_build_window_strings(window.c_str(), &window_class, &title, &executable);
+
+	HWND hwnd = ms_find_window(INCLUDE_MINIMIZED, (enum window_priority)priority, window_class ? window_class : "",
+				   title ? title : "", executable ? executable : "");
+
+	bfree(window_class);
+	bfree(title);
+	bfree(executable);
+	return hwnd != NULL;
+#else
+	UNUSED_PARAMETER(window);
+	UNUSED_PARAMETER(priority);
+	return false;
+#endif
 }
 
 /* Point every Desktop Audio (wasapi_output_capture) source at the given app
@@ -86,44 +121,74 @@ void OBSBasic::UpdateAudioOutputFilterRouting()
 	/* First, reconcile which app (if any) Desktop Audio should exclude,
 	 * based on subtractive audio sources. Run unconditionally so that
 	 * un-marking the last subtractive source restores full Desktop Audio. */
+	struct Candidate {
+		std::string name;
+		std::string window;
+		int priority;
+	};
+	std::vector<Candidate> candidates;
+
+	obs_enum_sources(
+		[](void *param, obs_source_t *source) {
+			auto *list = static_cast<std::vector<Candidate> *>(param);
+			if (!source_is_subtractive_audio(source))
+				return true;
+			OBSDataAutoRelease st = obs_source_get_settings(source);
+			const char *w = obs_data_get_string(st, "window");
+			const char *n = obs_source_get_name(source);
+			list->push_back({n ? n : "", w ? w : "", (int)obs_data_get_int(st, "priority")});
+			return true;
+		},
+		&candidates);
+
+	/* Only one process tree can be excluded, so pick a target whose app is
+	 * actually running; a stale target would otherwise disable subtraction
+	 * entirely. */
 	std::string excludeWindow;
 	int excludePriority = 0;
-	int subtractiveCount = 0;
-	{
-		struct FindCtx {
-			std::string *window;
-			int *priority;
-			int *count;
-		} fc{&excludeWindow, &excludePriority, &subtractiveCount};
+	size_t chosen = candidates.size();
+	for (size_t i = 0; i < candidates.size(); i++) {
+		if (subtractive_target_resolves(candidates[i].window, candidates[i].priority)) {
+			chosen = i;
+			break;
+		}
+	}
 
-		obs_enum_sources(
-			[](void *param, obs_source_t *source) {
-				auto *c = static_cast<FindCtx *>(param);
-				if (!source_is_subtractive_audio(source))
-					return true;
-				(*c->count)++;
-				if (c->window->empty()) {
-					OBSDataAutoRelease st = obs_source_get_settings(source);
-					const char *w = obs_data_get_string(st, "window");
-					if (w)
-						*c->window = w;
-					*c->priority = (int)obs_data_get_int(st, "priority");
-				}
-				return true;
-			},
-			&fc);
+	if (chosen < candidates.size()) {
+		excludeWindow = candidates[chosen].window;
+		excludePriority = candidates[chosen].priority;
+	} else if (!candidates.empty()) {
+		/* none are running right now: keep the first as the target so
+		 * the exclusion engages once that app launches */
+		chosen = 0;
+		excludeWindow = candidates[0].window;
+		excludePriority = candidates[0].priority;
+		blog(LOG_WARNING,
+		     "Subtractive audio: no subtractive source's app is currently running; "
+		     "Desktop Audio is capturing everything until '%s' appears",
+		     candidates[0].name.c_str());
 	}
 
 	apply_desktop_audio_exclusion(excludeWindow, excludePriority);
 
-	if (subtractiveCount > 1)
+	if (candidates.size() > 1) {
+		std::string ignored;
+		for (size_t i = 0; i < candidates.size(); i++) {
+			if (i == chosen)
+				continue;
+			if (!ignored.empty())
+				ignored += ", ";
+			ignored += candidates[i].name;
+		}
 		blog(LOG_WARNING,
-		     "Subtractive audio: %d sources are marked subtractive, but Windows can exclude only "
-		     "one app tree from Desktop Audio; only the first is excluded",
-		     subtractiveCount);
+		     "Subtractive audio: Windows can exclude only ONE app tree from Desktop Audio. "
+		     "Excluding '%s'; NOT excluded (their audio still reaches every output via Desktop "
+		     "Audio): %s",
+		     chosen < candidates.size() ? candidates[chosen].name.c_str() : "(none)", ignored.c_str());
+	}
 
 	const bool anyFilter = obs_output_filtered_source_count() > 0;
-	if (!anyFilter && subtractiveCount == 0)
+	if (!anyFilter && candidates.empty())
 		return;
 
 	const char *mode = config_get_string(activeConfiguration, "Output", "Mode");
@@ -135,7 +200,7 @@ void OBSBasic::UpdateAudioOutputFilterRouting()
 		 * "subtract from both": Desktop Audio already excludes the app,
 		 * and we mute the app source from the single output track so it
 		 * is not re-added. */
-		if (subtractiveCount > 0) {
+		if (!candidates.empty()) {
 			obs_enum_sources(
 				[](void *, obs_source_t *source) {
 					if (source_is_subtractive_audio(source) &&

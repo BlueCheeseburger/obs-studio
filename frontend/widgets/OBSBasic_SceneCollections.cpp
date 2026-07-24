@@ -1471,6 +1471,8 @@ retryScene:
 	     obs_output_filtered_source_count());
 	ResetOutputs();
 
+	AutoNameProcessAudioSources();
+
 	/* One-shot: LoadData also runs when the user switches scene
 	 * collections mid-session, and auto-record must only fire for the
 	 * initial load of the launch. */
