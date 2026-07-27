@@ -74,8 +74,20 @@ public:
 	void checkFileAsync(const QString &path, double nominalFps = 0.0);
 
 signals:
-	/* message is ready for direct display in a desktop notification */
+	/* Real-time encoder-overload/dropped-frames alert only (the live skip-
+	 * ratio watchdog) — the one case worth interrupting the user for, since
+	 * it fires while the recording is still salvageable. Triggers a desktop
+	 * notification + flashing tray icon. */
 	void healthAlert(const QString &message);
+
+	/* Detection/logging only, no notification or tray flash: the freeze
+	 * watchdog (picture stuck while audio active) and the post-recording
+	 * file probe. Both still run and still log every finding — just without
+	 * interrupting the user, since by the time either fires there is
+	 * nothing left to act on live (freeze: encoder skip already covers the
+	 * actionable "something is wrong now" case; file probe: the recording
+	 * this refers to has already finished). */
+	void healthAlertSilent(const QString &message);
 
 private:
 	QPointer<QTimer> pollTimer;

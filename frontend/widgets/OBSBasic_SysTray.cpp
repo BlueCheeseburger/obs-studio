@@ -45,6 +45,7 @@ void OBSBasic::SystemTrayInit()
 	sysTrayVirtualCam = new QAction(VirtualCamActive() ? QTStr("Basic.Main.StopVirtualCam")
 							   : QTStr("Basic.Main.StartVirtualCam"),
 					trayMenu);
+	sysTrayStopAllAndClose = new QAction(QTStr("Basic.SystemTray.StopAllAndClose"), trayMenu);
 	exit = new QAction(QTStr("Exit"), trayMenu);
 
 	previewProjector = new QMenu(QTStr("Projector.Open.Preview"), trayMenu);
@@ -61,6 +62,7 @@ void OBSBasic::SystemTrayInit()
 	trayMenu->addAction(sysTrayReplayBuffer);
 	trayMenu->addAction(sysTrayVirtualCam);
 	trayMenu->addSeparator();
+	trayMenu->addAction(sysTrayStopAllAndClose);
 	trayMenu->addAction(exit);
 	trayIcon->setContextMenu(trayMenu);
 	trayIcon->show();
@@ -91,6 +93,7 @@ void OBSBasic::SystemTrayInit()
 	connect(sysTrayRecord, &QAction::triggered, this, &OBSBasic::RecordActionTriggered);
 	connect(sysTrayReplayBuffer.data(), &QAction::triggered, this, &OBSBasic::ReplayBufferActionTriggered);
 	connect(sysTrayVirtualCam.data(), &QAction::triggered, this, &OBSBasic::VirtualCamActionTriggered);
+	connect(sysTrayStopAllAndClose.data(), &QAction::triggered, this, &OBSBasic::StopAllAndClose);
 	connect(exit, &QAction::triggered, this, &OBSBasic::close);
 }
 
@@ -113,9 +116,27 @@ void OBSBasic::IconActivated(QSystemTrayIcon::ActivationReason reason)
 
 void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n)
 {
-	if (trayIcon && trayIcon->isVisible() && QSystemTrayIcon::supportsMessages()) {
+	/* SysTrayNotify() can silently do nothing if any of these are false, with
+	 * no other indication anywhere that the notification never went out -
+	 * log which case this was so a "why didn't I get a notification" report
+	 * can actually be diagnosed from the log instead of guessed at. Note
+	 * that even a successful showMessage() call only means Windows was
+	 * *asked* to show a toast; OS-level suppression (Focus Assist, this
+	 * app's notification permission being off in Windows Settings) happens
+	 * below Qt and can't be detected or logged from here. */
+	bool haveIcon = trayIcon;
+	bool iconVisible = trayIcon && trayIcon->isVisible();
+	bool platformSupports = QSystemTrayIcon::supportsMessages();
+
+	if (haveIcon && iconVisible && platformSupports) {
 		QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::MessageIcon(n);
 		trayIcon->showMessage("OBS Studio", text, icon, 10000);
+		blog(LOG_INFO, "SysTrayNotify: notification sent to Windows: \"%s\"", QT_TO_UTF8(text));
+	} else {
+		blog(LOG_WARNING,
+		     "SysTrayNotify: notification NOT sent (tray icon exists: %d, visible: %d, "
+		     "platform supports messages: %d): \"%s\"",
+		     haveIcon, iconVisible, platformSupports, QT_TO_UTF8(text));
 	}
 }
 
@@ -154,6 +175,26 @@ void OBSBasic::SystemTray(bool firstStarted)
 bool OBSBasic::sysTrayMinimizeToTray()
 {
 	return config_get_bool(App()->GetUserConfig(), "BasicWindow", "SysTrayMinimizeToTray");
+}
+
+void OBSBasic::StopAllAndClose()
+{
+	blog(LOG_INFO, "Tray: Stop All & Close triggered");
+
+	if (outputHandler) {
+		/* Streaming first: StopStreaming() already cascades into
+		 * StopRecording()/StopReplayBuffer() itself when the "keep
+		 * recording/replay buffer running after stream stops" settings
+		 * are off, so calling it first avoids doing that work twice. */
+		if (outputHandler->StreamingActive())
+			StopStreaming();
+		if (outputHandler->RecordingActive())
+			StopRecording();
+		if (outputHandler->replayBuffer && outputHandler->ReplayBufferActive())
+			StopReplayBuffer();
+	}
+
+	closeWindow();
 }
 
 void OBSBasic::updateSysTrayProjectorMenu()

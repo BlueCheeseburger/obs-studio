@@ -46,6 +46,7 @@
 #include <shellapi.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shobjidl.h>
 #else
 #include <signal.h>
 #endif
@@ -928,6 +929,18 @@ int main(int argc, char *argv[])
 	// Abort as early as possible if MSVC runtime is outdated
 	if (vc_runtime_outdated())
 		return 1;
+
+	/* Without this, Windows has no AppUserModelID to attribute toast
+	 * notifications to for an app that isn't installed via a Start Menu
+	 * shortcut (this is a locally-built, portable-launched binary). Without
+	 * one, QSystemTrayIcon::showMessage() can succeed at the API level
+	 * while Windows silently never displays the toast - confirmed via
+	 * HKCU\...\Notifications\Settings having entries for every other
+	 * Win32 app on this machine (Chrome, Discord, etc.) but none for OBS.
+	 * Must be set before any window/tray icon is created. The ID must stay
+	 * the same across builds, or Windows treats it as a new app each time
+	 * and any per-app notification settings the user configures are lost. */
+	SetCurrentProcessExplicitAppUserModelID(L"BlueCheeseburger.OBSStudio");
 
 	// Try to keep this as early as possible
 	install_dll_blocklist_hook();
