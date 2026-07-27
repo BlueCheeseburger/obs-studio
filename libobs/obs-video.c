@@ -911,6 +911,25 @@ static inline void output_frame(struct obs_core_video_mix *video)
 	const bool raw_active = video->raw_was_active;
 	const bool gpu_active = video->gpu_was_active;
 
+	/* Rendering a mix costs a full scene render every frame regardless of
+	 * whether anything consumes the result. A dedicated output-filtered mix
+	 * (see obs_add_output_filtered_mix) has no encoder bound to it while its
+	 * output is stopped — e.g. the stream mix while not streaming — so
+	 * rendering it is pure waste, and on a GPU shared with a game that waste
+	 * shows up as encoder lag.
+	 *
+	 * The main canvas mix is exempt: the preview, projectors and every other
+	 * obs_render_main_texture() consumer read its render texture directly
+	 * rather than through the raw/GPU-encoder paths, so it has to keep
+	 * rendering even when no output is attached. */
+	const struct obs_canvas *main_canvas = obs->data.main_canvas;
+	if (!raw_active && !gpu_active && (!main_canvas || main_canvas->mix != video)) {
+		/* leave no stale texture behind for can_reuse_mix_texture() */
+		video->texture_rendered = false;
+		video->texture_converted = false;
+		return;
+	}
+
 	int cur_texture = video->cur_texture;
 	int prev_texture = cur_texture == 0 ? NUM_TEXTURES - 1 : cur_texture - 1;
 	struct video_data frame;

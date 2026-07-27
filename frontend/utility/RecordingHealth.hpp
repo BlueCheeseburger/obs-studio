@@ -93,6 +93,11 @@ private:
 
 	/* --- live freeze watchdog: raw video side (video thread) --- */
 	bool rawVideoTapActive = false;
+	/* video_t the raw tap is currently attached to (the record mix, not the
+	 * main canvas — see recordingStarted()); needed at detach time since
+	 * obs_remove_raw_video_callback_mix() must be called with the exact
+	 * video_t it was added with. */
+	video_t *tappedVideo = nullptr;
 	std::vector<uint8_t> prevVideoSample;
 	QMutex freezeMutex;
 	int frozenSeconds = 0;
