@@ -62,8 +62,8 @@ RecordingHealthMonitor::RecordingHealthMonitor(QObject *parent) : QObject(parent
 
 RecordingHealthMonitor::~RecordingHealthMonitor()
 {
-	if (rawVideoTapActive)
-		obs_remove_raw_video_callback(&RecordingHealthMonitor::RawVideoFrame, this);
+	if (rawVideoTapActive && tappedVideo)
+		obs_remove_raw_video_callback_mix(tappedVideo, &RecordingHealthMonitor::RawVideoFrame, this);
 	if (rawAudioTapActive)
 		obs_remove_raw_audio_callback(0, &RecordingHealthMonitor::RawAudioFrame, this);
 }
@@ -114,7 +114,18 @@ void RecordingHealthMonitor::recordingStarted(obs_output_t *output)
 		conv.range = VIDEO_RANGE_DEFAULT;
 		conv.colorspace = VIDEO_CS_DEFAULT;
 
-		obs_add_raw_video_callback2(&conv, divisor, &RecordingHealthMonitor::RawVideoFrame, this);
+		/* Tap the video actually being recorded (falls back to the main
+		 * canvas only if the output somehow has none) instead of the main
+		 * canvas unconditionally. obs_add_raw_video_callback2() is hardwired
+		 * to the main canvas, which forces it to keep rendering for the
+		 * whole recording even when nothing else needs it (e.g. preview
+		 * hidden, not streaming) — this uses obs_add_raw_video_callback_mix()
+		 * against the record mix instead, which already has to render since
+		 * the file output consumes it, so the watchdog costs nothing extra
+		 * and no longer keeps an otherwise-idle main canvas alive. */
+		tappedVideo = video ? video : obs_get_video();
+		obs_add_raw_video_callback_mix(tappedVideo, &conv, divisor, &RecordingHealthMonitor::RawVideoFrame,
+					       this);
 		rawVideoTapActive = true;
 	}
 
@@ -131,7 +142,9 @@ void RecordingHealthMonitor::recordingStopped()
 	weakOutput = nullptr;
 
 	if (rawVideoTapActive) {
-		obs_remove_raw_video_callback(&RecordingHealthMonitor::RawVideoFrame, this);
+		if (tappedVideo)
+			obs_remove_raw_video_callback_mix(tappedVideo, &RecordingHealthMonitor::RawVideoFrame, this);
+		tappedVideo = nullptr;
 		rawVideoTapActive = false;
 	}
 	if (rawAudioTapActive) {
