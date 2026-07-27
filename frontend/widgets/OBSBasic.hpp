@@ -1043,6 +1043,7 @@ private:
 
 private slots:
 	void RecordingHealthAlert(const QString &message);
+	void RecordingHealthAlertSilent(const QString &message);
 
 public:
 	void StopTrayAlertFlash();
@@ -1570,7 +1571,17 @@ private:
 	QPointer<QAction> sysTrayRecord;
 	QPointer<QAction> sysTrayReplayBuffer;
 	QPointer<QAction> sysTrayVirtualCam;
+	QPointer<QAction> sysTrayStopAllAndClose;
 	QPointer<QMenu> trayMenu;
+
+	/* Stops streaming, recording, and the replay buffer (whichever are
+	 * active) with no confirmation prompts — the tray action that invokes
+	 * this is itself the user's explicit one-click confirmation — then
+	 * closes OBS directly via closeWindow(), bypassing closeEvent()'s
+	 * prompt-for-close path entirely so this can never get stuck open
+	 * waiting on a dialog. Mirrors the existing WM_ENDSESSION emergency-
+	 * shutdown path in NativeEventFilter_Windows.cpp. */
+	void StopAllAndClose();
 
 	bool sysTrayMinimizeToTray();
 	void updateSysTrayProjectorMenu();

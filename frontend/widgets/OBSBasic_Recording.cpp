@@ -421,6 +421,14 @@ void OBSBasic::RecordingHealthAlert(const QString &message)
 	StartTrayAlertFlash();
 }
 
+void OBSBasic::RecordingHealthAlertSilent(const QString &message)
+{
+	/* Detection/corroboration wiring is unchanged (freeze watchdog, file
+	 * probe) - this just logs instead of interrupting the user with a
+	 * notification + flashing tray icon. */
+	blog(LOG_WARNING, "[recording health] %s", QT_TO_UTF8(message));
+}
+
 void OBSBasic::StartTrayAlertFlash()
 {
 	if (!trayIcon || !trayIcon->isVisible())

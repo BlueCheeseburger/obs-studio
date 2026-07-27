@@ -1296,6 +1296,8 @@ void OBSBasic::OBSInit()
 
 	recordingHealth = new RecordingHealthMonitor(this);
 	connect(recordingHealth, &RecordingHealthMonitor::healthAlert, this, &OBSBasic::RecordingHealthAlert);
+	connect(recordingHealth, &RecordingHealthMonitor::healthAlertSilent, this,
+		&OBSBasic::RecordingHealthAlertSilent);
 
 	/* test/diagnostic hook: probe an arbitrary file at startup */
 	{

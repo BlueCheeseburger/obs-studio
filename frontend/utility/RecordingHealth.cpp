@@ -244,7 +244,7 @@ void RecordingHealthMonitor::poll()
 	     "[recording health] live: picture has not visibly changed for %d s while audio "
 	     "shows activity (mean %.1f dB, variation %.1f dB) - possible capture/encoder issue",
 	     frozen, mean, stddev);
-	emit healthAlert(QTStr("Basic.RecordingHealth.LiveFreezeAlert").arg(frozen));
+	emit healthAlertSilent(QTStr("Basic.RecordingHealth.LiveFreezeAlert").arg(frozen));
 }
 
 void RecordingHealthMonitor::RawVideoFrame(void *param, struct video_data *frame)
@@ -590,7 +590,7 @@ void RecordingHealthMonitor::checkFileAsync(const QString &path, double nominalF
 			qApp,
 			[guard, msg]() {
 				if (guard)
-					emit guard->healthAlert(msg);
+					emit guard->healthAlertSilent(msg);
 			},
 			Qt::QueuedConnection);
 	}).detach();
