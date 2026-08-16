@@ -65,6 +65,7 @@ signals:
 	void StudioModeButtonClicked();
 	void SettingsButtonClicked();
 	void OutputRoutingButtonClicked();
+	void RecordingDiagnosticsButtonClicked();
 
 	void StartStreamMenuActionClicked();
 	void StopStreamMenuActionClicked();
