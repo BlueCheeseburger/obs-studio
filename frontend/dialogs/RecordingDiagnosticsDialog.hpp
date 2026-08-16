@@ -9,41 +9,32 @@
     Motivation: a 19-hour unattended recording degraded into ~93% skipped
     frames and a frozen picture. The live watchdog did detect it and fire
     notifications, but nobody was at the machine to see them, and there was
-    no way to ask "is this recording OK right now?" on demand. This dialog
-    is that question.
+    no way to ask "is this recording OK right now?" on demand.
 
     Each check runs independently with its own progress, so the ones backed
-    by instantly-available state resolve immediately while the two that need
-    real sampling (picture freeze, recent file integrity) report genuine
-    progress as they work. The whole run is bounded to a few seconds.
+    by instantly-available state resolve immediately while the ones that
+    need real sampling report genuine progress as they work.
 
-    Checks:
-      1. Output active      - is a recording actually running right now
-      2. Encoder skip       - skipped/total frames sampled over a short
-                              window, i.e. the encoder failing to keep up
-      3. Picture freeze     - downscaled frames sampled from the record mix
-                              and diffed, i.e. the picture silently stuck
-      4. Audio flowing      - raw mixed audio sampled for real signal
-      5. Recent file        - demuxes only the TAIL of the in-progress file
-                              (seeking near EOF rather than scanning from
-                              byte 0, which would defeat the "few seconds"
-                              budget on a multi-GB file) and looks for PTS
-                              gaps / collapsed-content stretches
-      6. Disk space         - free space minus the point at which OBS force
-                              stops recording, divided by this session's
-                              measured write rate, reported as remaining
-                              recording time
+    A deliberate design rule throughout: a signal that is ambiguous on its
+    own is corroborated against another before it is allowed to fail. Most
+    importantly, a static picture is NOT a fault by itself - a paused game,
+    a menu, or an idle desktop looks exactly like a dead capture - so it is
+    only escalated when the encoder is also in trouble. This mirrors the
+    corroboration logic the live freeze watchdog already uses, and exists
+    to avoid the false positives that made an earlier version of that
+    watchdog untrustworthy.
 ******************************************************************************/
 
 #pragma once
 
 #include <obs.hpp>
 
+#include <util/platform.h>
+
 #include <QDialog>
 #include <QPointer>
 
 #include <atomic>
-#include <memory>
 #include <vector>
 
 class OBSBasic;
@@ -77,9 +68,14 @@ private:
 	enum CheckId {
 		CheckOutput = 0,
 		CheckEncoder,
+		CheckRenderLag,
+		CheckFps,
 		CheckFreeze,
 		CheckAudio,
+		CheckAudioRouting,
+		CheckFileGrowing,
 		CheckFile,
+		CheckCpu,
 		CheckDisk,
 		CheckCount,
 	};
@@ -95,36 +91,38 @@ private:
 	QPointer<QTimer> spinnerTimer;
 	QPointer<QTimer> sampleTimer;
 
-	/* verdicts, filled in as checks complete */
 	int failCount = 0;
 	int warnCount = 0;
 	int completedCount = 0;
 
-	/* ---- sampling state for the live checks ---- */
-	OBSWeakOutputAutoRelease weakOutput;
+	/* ---- sampling state ---- */
 	video_t *sampledVideo = nullptr;
 
-	/* encoder skip sampling */
 	uint32_t startSkipped = 0;
 	uint32_t startTotal = 0;
-
-	/* byte-rate sampling for the disk projection */
+	uint32_t startLagged = 0;
+	uint32_t startRendered = 0;
 	uint64_t startBytes = 0;
 
-	/* freeze detection: raw video tap on the record mix */
+	/* Encoder skip ratio measured this run; the freeze verdict is
+	 * corroborated against it rather than standing on its own. */
+	double measuredSkipRatio = 0.0;
+	bool haveSkipRatio = false;
+
+	os_cpu_usage_info_t *cpuInfo = nullptr;
+
+	/* freeze detection */
 	bool videoTapActive = false;
 	std::vector<uint8_t> prevFrame;
 	std::atomic<int> frameSamples{0};
 	std::atomic<int> changedSamples{0};
-	std::atomic<int> maxDiff{0};
 
-	/* audio activity: raw audio tap */
+	/* audio activity */
 	bool audioTapActive = false;
 	std::atomic<int> audioBlocks{0};
 	std::atomic<int> audioActiveBlocks{0};
-	std::atomic<int> audioPeakMilli{0}; /* peak level * 1000, ints for atomics */
+	std::atomic<int> audioPeakMilli{0};
 
-	/* elapsed ticks of the sampling window */
 	int sampleTicks = 0;
 
 	void BuildUi();
@@ -134,13 +132,15 @@ private:
 	void SetRowRunning(int id);
 	void SetRowResult(int id, int severity, const QString &text);
 	void SetRowProgress(int id, int pct);
+	void SkipRemainingLiveChecks();
 
-	/* individual checks */
 	void RunInstantChecks();
 	void BeginSampling();
 	void OnSampleTick();
 	void FinishSamplingChecks();
+	void RunAudioRoutingCheck();
 	void RunDiskCheck();
+	void RunCpuCheck();
 	void RunFileTailCheckAsync();
 
 	void AttachTaps();
