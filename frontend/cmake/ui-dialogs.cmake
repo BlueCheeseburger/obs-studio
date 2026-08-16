@@ -23,6 +23,8 @@ target_sources(
     dialogs/StreamingChecklistDialog.hpp
     dialogs/OutputRoutingVisualizer.cpp
     dialogs/OutputRoutingVisualizer.hpp
+    dialogs/RecordingDiagnosticsDialog.cpp
+    dialogs/RecordingDiagnosticsDialog.hpp
     dialogs/OAuthLogin.cpp
     dialogs/OAuthLogin.hpp
     dialogs/OBSAbout.cpp

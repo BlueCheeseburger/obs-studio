@@ -48,6 +48,9 @@ OBSBasicControls::OBSBasicControls(OBSBasic *main) : QFrame(nullptr), ui(new Ui:
 	connect(
 		ui->outputRoutingButton, &QPushButton::clicked, this,
 		[this]() { emit this->OutputRoutingButtonClicked(); }, Qt::DirectConnection);
+	connect(
+		ui->recordingDiagnosticsButton, &QPushButton::clicked, this,
+		[this]() { emit this->RecordingDiagnosticsButtonClicked(); }, Qt::DirectConnection);
 
 	/* Transfer menu actions signals as OBSBasicControls signals */
 	connect(

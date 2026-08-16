@@ -1087,6 +1087,11 @@ public slots:
 	void TriggerRecordButton();
 	void TriggerStopButton();
 
+	/* Seconds the current recording has been running, excluding paused
+	 * time (shared with the taskbar tooltip's elapsed counter). Used by the
+	 * diagnostics dialog to derive this session's average write rate. */
+	int GetRecordingElapsedSeconds() const { return taskbarElapsedSeconds; }
+
 	/* Safety net: warns if an audible audio source can't reach any track the
 	 * recording is actually encoding (e.g. it was excluded from the mixer
 	 * tracks). Reads the live output so it is correct in every output mode. */
