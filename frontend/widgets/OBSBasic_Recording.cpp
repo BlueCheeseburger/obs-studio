@@ -131,6 +131,13 @@ void OBSBasic::StartRecording()
 	SaveProject();
 
 	outputHandler->StartRecording();
+
+	/* Mirrors the existing stream->replay-buffer coupling, but keyed off
+	 * recording. StartReplayBuffer() already no-ops when the buffer is
+	 * unavailable or already running, so this is safe to call
+	 * unconditionally. */
+	if (config_get_bool(App()->GetUserConfig(), "BasicWindow", "ReplayBufferWhileRecording"))
+		StartReplayBuffer();
 }
 
 void OBSBasic::RecordStopping()
@@ -150,6 +157,16 @@ void OBSBasic::StopRecording()
 
 	if (outputHandler->RecordingActive())
 		outputHandler->StopRecording(recordingStopping);
+
+	/* Only tears the replay buffer down alongside the recording when the
+	 * user has NOT asked to keep it running. Stopping the replay buffer
+	 * never stops the recording - that direction stays independent. */
+	bool replayBufferWhileRecording =
+		config_get_bool(App()->GetUserConfig(), "BasicWindow", "ReplayBufferWhileRecording");
+	bool keepReplayBufferRecordingStops =
+		config_get_bool(App()->GetUserConfig(), "BasicWindow", "KeepReplayBufferRecordingStops");
+	if (replayBufferWhileRecording && !keepReplayBufferRecordingStops)
+		StopReplayBuffer();
 
 	OnDeactivate();
 }
