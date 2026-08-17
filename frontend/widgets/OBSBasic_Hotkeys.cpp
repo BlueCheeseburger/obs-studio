@@ -270,6 +270,16 @@ void OBSBasic::CreateHotkeys()
 	screenshotHotkey = obs_hotkey_register_frontend("OBSBasic.Screenshot", Str("Screenshot"), screenshot, this);
 	LoadHotkey(screenshotHotkey, "OBSBasic.Screenshot");
 
+	auto runDiagnostics = [](void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed) {
+		if (pressed)
+			QMetaObject::invokeMethod(static_cast<OBSBasic *>(data), "RunRecordingDiagnosticsNotify",
+						  Qt::QueuedConnection);
+	};
+
+	recordingDiagnosticsHotkey = obs_hotkey_register_frontend(
+		"OBSBasic.RunRecordingDiagnostics", Str("Basic.Main.RecordingDiagnostics"), runDiagnostics, this);
+	LoadHotkey(recordingDiagnosticsHotkey, "OBSBasic.RunRecordingDiagnostics");
+
 	auto screenshotSource = [](void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed) {
 		if (pressed)
 			QMetaObject::invokeMethod(static_cast<OBSBasic *>(data), "ScreenshotSelectedSource",

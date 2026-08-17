@@ -114,7 +114,7 @@ void OBSBasic::IconActivated(QSystemTrayIcon::ActivationReason reason)
 #endif
 }
 
-void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n)
+void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n, const QString &title)
 {
 	/* SysTrayNotify() can silently do nothing if any of these are false, with
 	 * no other indication anywhere that the notification never went out -
@@ -130,7 +130,7 @@ void OBSBasic::SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n
 
 	if (haveIcon && iconVisible && platformSupports) {
 		QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::MessageIcon(n);
-		trayIcon->showMessage("OBS Studio", text, icon, 10000);
+		trayIcon->showMessage(title.isEmpty() ? QStringLiteral("OBS Studio") : title, text, icon, 10000);
 		blog(LOG_INFO, "SysTrayNotify: notification sent to Windows: \"%s\"", QT_TO_UTF8(text));
 	} else {
 		blog(LOG_WARNING,

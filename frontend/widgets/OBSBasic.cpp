@@ -2106,6 +2106,15 @@ void OBSBasic::SessionEndShutdown()
 			QApplication::processEvents();
 			QThread::msleep(20);
 		}
+
+		/* Detach the health watchdog's raw taps explicitly. They hang
+		 * off the record mix, and the stop above is a FORCE stop whose
+		 * "stopped" signal (which normally detaches them) may not have
+		 * been delivered yet - leaving a callback pointing at a mix the
+		 * output handler is about to drop. Idempotent if already
+		 * detached. */
+		if (recordingHealth)
+			recordingHealth->recordingStopped();
 	}
 
 	closeWindow();
