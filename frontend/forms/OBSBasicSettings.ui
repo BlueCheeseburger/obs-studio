@@ -424,6 +424,23 @@
                      </property>
                     </widget>
                    </item>
+                   <item row="7" column="1">
+                    <widget class="QCheckBox" name="replayWhileRecording">
+                     <property name="text">
+                      <string>Basic.Settings.General.ReplayBufferWhileRecording</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="8" column="1">
+                    <widget class="QCheckBox" name="keepReplayRecordStops">
+                     <property name="enabled">
+                      <bool>false</bool>
+                     </property>
+                     <property name="text">
+                      <string>Basic.Settings.General.KeepReplayBufferRecordingStops</string>
+                     </property>
+                    </widget>
+                   </item>
                   </layout>
                  </widget>
                 </item>
@@ -9771,6 +9788,22 @@
     <hint type="destinationlabel">
      <x>933</x>
      <y>291</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>replayWhileRecording</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>keepReplayRecordStops</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>933</x>
+     <y>314</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>933</x>
+     <y>337</y>
     </hint>
    </hints>
   </connection>
