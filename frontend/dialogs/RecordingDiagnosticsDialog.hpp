@@ -61,7 +61,11 @@ class RecordingDiagnosticsDialog : public QDialog {
 	Q_OBJECT
 
 public:
-	explicit RecordingDiagnosticsDialog(OBSBasic *main, QWidget *parent = nullptr);
+	/* notifyOnly: run the whole checklist without ever showing the window,
+	 * then deliver the verdict as a desktop notification and self-destruct.
+	 * Used by the "run diagnostics" hotkey so the check can be triggered
+	 * from inside a fullscreen game without switching away from it. */
+	explicit RecordingDiagnosticsDialog(OBSBasic *main, QWidget *parent = nullptr, bool notifyOnly = false);
 	~RecordingDiagnosticsDialog() override;
 
 private:
@@ -94,6 +98,13 @@ private:
 	int failCount = 0;
 	int warnCount = 0;
 	int completedCount = 0;
+
+	/* notification mode */
+	bool notifyOnly = false;
+	QStringList problemLines; /* "<check> — <result>" for each warn/fail */
+	QString diskLine;         /* always kept, healthy or not */
+
+	void SendNotification();
 
 	/* ---- sampling state ---- */
 	video_t *sampledVideo = nullptr;

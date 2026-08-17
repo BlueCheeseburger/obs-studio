@@ -496,6 +496,7 @@ signals:
 private:
 	QPointer<QObject> shortcutFilter;
 	obs_hotkey_id statsHotkey = 0;
+	obs_hotkey_id recordingDiagnosticsHotkey = 0;
 	obs_hotkey_id screenshotHotkey = 0;
 	obs_hotkey_id sourceScreenshotHotkey = 0;
 
@@ -1099,6 +1100,10 @@ public slots:
 
 public slots:
 	void AutoNameProcessAudioSources();
+	/* Runs the full diagnostics checklist without showing a window and
+	 * reports the verdict as a desktop notification, so it can be fired
+	 * by hotkey from inside a fullscreen game. */
+	void RunRecordingDiagnosticsNotify();
 
 public:
 
@@ -1595,7 +1600,8 @@ private slots:
 	void IconActivated(QSystemTrayIcon::ActivationReason reason);
 
 public:
-	void SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n);
+	void SysTrayNotify(const QString &text, QSystemTrayIcon::MessageIcon n,
+			   const QString &title = QString());
 
 	void SystemTrayInit();
 	void SystemTray(bool firstStarted);

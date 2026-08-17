@@ -77,8 +77,35 @@ struct BasicOutputHandler {
 
 	virtual ~BasicOutputHandler()
 	{
+		/* Release the outputs BEFORE dropping the video mixes they
+		 * encode from.
+		 *
+		 * In C++ the destructor BODY runs before members are implicitly
+		 * destroyed, and fileOutput/streamOutput/replayBuffer are
+		 * members of this class. Leaving this implicit therefore drops
+		 * the mixes first, and the outputs' encoders then disconnect
+		 * from an already-dead video_t - an access violation inside
+		 * video_output_disconnect2() during shutdown:
+		 *
+		 *   obs_output_destroy -> end_data_capture_thread
+		 *     -> obs_encoder_stop -> remove_connection
+		 *       -> stop_raw_video -> video_output_disconnect2  (boom)
+		 *
+		 * Releasing them here blocks until each output's data-capture
+		 * thread has stopped and every encoder has disconnected, so
+		 * nothing references the mixes by the time they are removed.
+		 *
+		 * Same ordering trap as ~MultiStreamOutput(). */
+		multitrackVideo.reset();
+		streamOutput = nullptr;
+		fileOutput = nullptr;
+		replayBuffer = nullptr;
+		virtualCam = nullptr;
+
 		obs_remove_video_mix(streamVideo);
 		obs_remove_video_mix(recordVideo);
+		streamVideo = nullptr;
+		recordVideo = nullptr;
 	};
 
 	virtual std::shared_future<void> SetupStreaming(obs_service_t *service,

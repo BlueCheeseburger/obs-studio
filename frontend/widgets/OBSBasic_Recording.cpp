@@ -22,6 +22,7 @@
 #include <components/UIValidation.hpp>
 #include <dialogs/OBSRemux.hpp>
 #include <utility/RecordingHealth.hpp>
+#include <dialogs/RecordingDiagnosticsDialog.hpp>
 
 #include <qt-wrappers.hpp>
 
@@ -436,6 +437,16 @@ void OBSBasic::RecordingHealthAlert(const QString &message)
 	blog(LOG_WARNING, "[recording health] ALERT: %s", QT_TO_UTF8(message));
 	SysTrayNotify(message, QSystemTrayIcon::Warning);
 	StartTrayAlertFlash();
+}
+
+/* Hotkey entry point: runs the diagnostics checklist headlessly and reports
+ * via desktop notification, so it can be triggered from inside a fullscreen
+ * game without switching to OBS. The dialog is never shown and deletes
+ * itself once it has notified. */
+void OBSBasic::RunRecordingDiagnosticsNotify()
+{
+	blog(LOG_INFO, "Recording diagnostics requested by hotkey");
+	new RecordingDiagnosticsDialog(this, this, /*notifyOnly=*/true);
 }
 
 void OBSBasic::RecordingHealthAlertSilent(const QString &message)

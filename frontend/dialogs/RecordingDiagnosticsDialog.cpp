@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QStringList>
 
 #include <util/platform.h>
 
@@ -69,9 +70,10 @@ static const char *kSpinnerFrames[] = {"|", "/", "-", "\\"};
 
 /* ------------------------------------------------------------------------- */
 
-RecordingDiagnosticsDialog::RecordingDiagnosticsDialog(OBSBasic *main_, QWidget *parent)
+RecordingDiagnosticsDialog::RecordingDiagnosticsDialog(OBSBasic *main_, QWidget *parent, bool notifyOnly_)
 	: QDialog(parent),
-	  main(main_)
+	  main(main_),
+	  notifyOnly(notifyOnly_)
 {
 	setWindowTitle(QTStr("RecordingDiagnostics.Title"));
 	setMinimumWidth(900);
@@ -223,12 +225,14 @@ void RecordingDiagnosticsDialog::SetRowResult(int id, int severity, const QStrin
 		setClasses(c.statusLabel, "text-warning");
 		setClasses(c.resultLabel, "text-warning");
 		warnCount++;
+		problemLines.append(QStringLiteral("%1: %2").arg(c.title).arg(text));
 		break;
 	case SevFail:
 		c.statusLabel->setText(QStringLiteral("✕"));
 		setClasses(c.statusLabel, "text-danger");
 		setClasses(c.resultLabel, "text-danger");
 		failCount++;
+		problemLines.prepend(QStringLiteral("%1: %2").arg(c.title).arg(text));
 		break;
 	default:
 		c.statusLabel->setText(QStringLiteral("–"));
@@ -236,6 +240,11 @@ void RecordingDiagnosticsDialog::SetRowResult(int id, int severity, const QStrin
 		setClasses(c.resultLabel, "text-muted");
 		break;
 	}
+
+	/* The disk projection is the one forward-looking number, so it is kept
+	 * for the notification whether or not it counts as a problem. */
+	if (id == CheckDisk)
+		diskLine = text;
 
 	completedCount++;
 	if (completedCount >= CheckCount)
@@ -260,6 +269,8 @@ void RecordingDiagnosticsDialog::StartRun()
 	measuredSkipRatio = 0.0;
 	haveSkipRatio = false;
 	prevFrame.clear();
+	problemLines.clear();
+	diskLine.clear();
 
 	runButton->setEnabled(false);
 	summaryLabel->setText(QTStr("RecordingDiagnostics.Running"));
@@ -294,6 +305,52 @@ void RecordingDiagnosticsDialog::FinishRun()
 		summaryLabel->setText(QTStr("RecordingDiagnostics.Summary.Good"));
 		setClasses(summaryLabel, "text-success");
 	}
+
+	if (notifyOnly) {
+		SendNotification();
+		deleteLater();
+	}
+}
+
+/* Compresses the full checklist into something that fits a desktop toast.
+ * Rules: never enumerate every check; lead with failures (SetRowResult
+ * prepends those ahead of warnings); name at most two and summarise the rest;
+ * and always append the disk projection, since it stays actionable even when
+ * nothing is wrong. */
+void RecordingDiagnosticsDialog::SendNotification()
+{
+	QString title;
+	QString body;
+
+	if (problemLines.isEmpty()) {
+		title = QTStr("RecordingDiagnostics.Notify.HealthyTitle");
+		body = QTStr("RecordingDiagnostics.Notify.HealthyBody").arg(CheckCount);
+		if (!diskLine.isEmpty())
+			body += QStringLiteral(" · ") + diskLine;
+	} else {
+		const int shown = std::min<int>(2, problemLines.size());
+		QStringList head;
+		for (int i = 0; i < shown; i++)
+			head << problemLines[i];
+
+		body = head.join(QStringLiteral(" · "));
+		const int extra = problemLines.size() - shown;
+		if (extra > 0)
+			body += QStringLiteral(" · ") + QTStr("RecordingDiagnostics.Notify.More").arg(extra);
+
+		if (failCount > 0)
+			title = failCount == 1 ? QTStr("RecordingDiagnostics.Notify.ProblemTitle")
+					       : QTStr("RecordingDiagnostics.Notify.ProblemsTitle").arg(failCount);
+		else
+			title = warnCount == 1 ? QTStr("RecordingDiagnostics.Notify.WarnTitle")
+					       : QTStr("RecordingDiagnostics.Notify.WarnsTitle").arg(warnCount);
+
+		/* only worth the extra room when time is actually short */
+		if (!diskLine.isEmpty() && checks[CheckDisk].done && failCount == 0)
+			body += QStringLiteral(" · ") + diskLine;
+	}
+
+	main->SysTrayNotify(body, failCount > 0 ? QSystemTrayIcon::Critical : QSystemTrayIcon::Warning, title);
 }
 
 void RecordingDiagnosticsDialog::SkipRemainingLiveChecks()
