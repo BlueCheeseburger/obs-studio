@@ -54,8 +54,9 @@ void OBSBasic::AutoRemux(QString input, bool no_show)
 
 	bool autoRemux = config_get_bool(config, "Video", "AutoRemux");
 
-	if (!autoRemux)
+	if (!autoRemux) {
 		return;
+	}
 
 	bool isSimpleMode = false;
 
@@ -71,12 +72,14 @@ void OBSBasic::AutoRemux(QString input, bool no_show)
 
 		bool ffmpegOutput = astrcmpi(recType, "FFmpeg") == 0;
 
-		if (ffmpegOutput)
+		if (ffmpegOutput) {
 			return;
+		}
 	}
 
-	if (input.isEmpty())
+	if (input.isEmpty()) {
 		return;
+	}
 
 	QFileInfo fi(input);
 	QString suffix = fi.suffix();
@@ -105,17 +108,20 @@ void OBSBasic::AutoRemux(QString input, bool no_show)
 	}
 
 	OBSRemux *remux = new OBSRemux(QT_TO_UTF8(path), this, true);
-	if (!no_show)
+	if (!no_show) {
 		remux->show();
+	}
 	remux->AutoRemux(input, output);
 }
 
 void OBSBasic::StartRecording()
 {
-	if (outputHandler->RecordingActive())
+	if (outputHandler->RecordingActive()) {
 		return;
-	if (disableOutputsRef)
+	}
+	if (disableOutputsRef) {
 		return;
+	}
 
 	if (!OutputPathValid()) {
 		OutputPathInvalidMessage();
@@ -145,8 +151,9 @@ void OBSBasic::RecordStopping()
 {
 	emit RecordingStopping();
 
-	if (sysTrayRecord)
+	if (sysTrayRecord) {
 		sysTrayRecord->setText(QTStr("Basic.Main.StoppingRecording"));
+	}
 
 	recordingStopping = true;
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STOPPING);
@@ -156,8 +163,9 @@ void OBSBasic::StopRecording()
 {
 	SaveProject();
 
-	if (outputHandler->RecordingActive())
+	if (outputHandler->RecordingActive()) {
 		outputHandler->StopRecording(recordingStopping);
+	}
 
 	/* Only tears the replay buffer down alongside the recording when the
 	 * user has NOT asked to keep it running. Stopping the replay buffer
@@ -263,11 +271,13 @@ void OBSBasic::RecordingStart()
 	ui->statusbar->RecordingStarted(outputHandler->fileOutput);
 	emit RecordingStarted(isRecordingPausable);
 
-	if (outputHandler)
+	if (outputHandler) {
 		WarnIfAudioSourcesExcludedFromRecording(outputHandler->fileOutput, QStringLiteral("recording"));
+	}
 
-	if (sysTrayRecord)
+	if (sysTrayRecord) {
 		sysTrayRecord->setText(QTStr("Basic.Main.StopRecording"));
+	}
 
 	recordingStopping = false;
 
@@ -291,8 +301,9 @@ void OBSBasic::RecordingStart()
 	UpdateTaskbarButtons();
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTED);
 
-	if (!diskFullTimer->isActive())
+	if (!diskFullTimer->isActive()) {
 		diskFullTimer->start(1000);
+	}
 
 	OnActivate();
 
@@ -304,8 +315,9 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 	ui->statusbar->RecordingStopped();
 	emit RecordingStopped();
 
-	if (sysTrayRecord)
+	if (sysTrayRecord) {
 		sysTrayRecord->setText(QTStr("Basic.Main.StartRecording"));
+	}
 
 	if (taskbarElapsedTimer)
 		taskbarElapsedTimer->stop();
@@ -339,10 +351,11 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 
 		errorDescription = Str("Output.RecordError.Msg");
 
-		if (use_last_error && !last_error.isEmpty())
+		if (use_last_error && !last_error.isEmpty()) {
 			dstr_printf(errorMessage, "%s<br><br>%s", errorDescription, QT_TO_UTF8(last_error));
-		else
+		} else {
 			dstr_copy(errorMessage, errorDescription);
+		}
 
 		OBSMessageBox::critical(this, QTStr("Output.RecordError.Title"), QT_UTF8(errorMessage));
 
@@ -363,8 +376,9 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 
 	OnEvent(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
 
-	if (diskFullTimer->isActive())
+	if (diskFullTimer->isActive()) {
 		diskFullTimer->stop();
+	}
 
 	AutoRemux(outputHandler->lastRecordingPath.c_str());
 
@@ -391,13 +405,15 @@ void OBSBasic::RecordActionTriggered()
 				this, QTStr("ConfirmStopRecord.Title"), QTStr("ConfirmStopRecord.Text"),
 				QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
-			if (button == QMessageBox::No)
+			if (button == QMessageBox::No) {
 				return;
+			}
 		}
 		StopRecording();
 	} else {
-		if (!UIValidation::NoSourcesConfirmation(this))
+		if (!UIValidation::NoSourcesConfirmation(this)) {
 			return;
+		}
 
 		StartRecording();
 	}
@@ -405,8 +421,9 @@ void OBSBasic::RecordActionTriggered()
 
 bool OBSBasic::RecordingActive()
 {
-	if (!outputHandler)
+	if (!outputHandler) {
 		return false;
+	}
 	return outputHandler->RecordingActive();
 }
 
@@ -528,8 +545,9 @@ void OBSBasic::RestoreTrayIcon()
 void OBSBasic::PauseRecording()
 {
 	if (!isRecordingPausable || !outputHandler || !outputHandler->fileOutput ||
-	    os_atomic_load_bool(&recording_paused))
+	    os_atomic_load_bool(&recording_paused)) {
 		return;
+	}
 
 	obs_output_t *output = outputHandler->fileOutput;
 
@@ -553,16 +571,18 @@ void OBSBasic::PauseRecording()
 
 		OnEvent(OBS_FRONTEND_EVENT_RECORDING_PAUSED);
 
-		if (os_atomic_load_bool(&replaybuf_active))
+		if (os_atomic_load_bool(&replaybuf_active)) {
 			ShowReplayBufferPauseWarning();
+		}
 	}
 }
 
 void OBSBasic::UnpauseRecording()
 {
 	if (!isRecordingPausable || !outputHandler || !outputHandler->fileOutput ||
-	    !os_atomic_load_bool(&recording_paused))
+	    !os_atomic_load_bool(&recording_paused)) {
 		return;
+	}
 
 	obs_output_t *output = outputHandler->fileOutput;
 
@@ -590,16 +610,18 @@ void OBSBasic::UnpauseRecording()
 
 void OBSBasic::RecordPauseToggled()
 {
-	if (!isRecordingPausable || !outputHandler || !outputHandler->fileOutput)
+	if (!isRecordingPausable || !outputHandler || !outputHandler->fileOutput) {
 		return;
+	}
 
 	obs_output_t *output = outputHandler->fileOutput;
 	bool enable = !obs_output_paused(output);
 
-	if (enable)
+	if (enable) {
 		PauseRecording();
-	else
+	} else {
 		UnpauseRecording();
+	}
 }
 
 void OBSBasic::UpdateIsRecordingPausable()
@@ -641,15 +663,17 @@ bool OBSBasic::LowDiskSpace()
 	const char *path;
 
 	path = GetCurrentOutputPath();
-	if (!path)
+	if (!path) {
 		return false;
+	}
 
 	uint64_t num_bytes = os_get_free_disk_space(path);
 
-	if (num_bytes < (MAX_BYTES_LEFT))
+	if (num_bytes < (MAX_BYTES_LEFT)) {
 		return true;
-	else
+	} else {
 		return false;
+	}
 }
 
 void OBSBasic::CheckDiskSpaceRemaining()
