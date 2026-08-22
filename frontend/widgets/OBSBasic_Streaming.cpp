@@ -512,6 +512,9 @@ void OBSBasic::StreamActionTriggered()
 			}
 		}
 
+		bool showChecklist =
+			config_get_bool(App()->GetUserConfig(), "BasicWindow", "StreamingChecklistEnabled");
+
 		if (bwtest && isVisible()) {
 			QMessageBox::StandardButton button = OBSMessageBox::question(this, QTStr("ConfirmBWTest.Title"),
 										     QTStr("ConfirmBWTest.Text"));
@@ -519,7 +522,10 @@ void OBSBasic::StreamActionTriggered()
 			if (button == QMessageBox::No) {
 				return;
 			}
-		} else if (confirm && isVisible()) {
+		} else if (confirm && !showChecklist && isVisible()) {
+			/* The checklist dialog's own Start/Cancel buttons already ask
+			 * for confirmation, so skip this redundant "are you sure"
+			 * prompt when it's going to be shown. */
 			QMessageBox::StandardButton button =
 				OBSMessageBox::question(this, QTStr("ConfirmStart.Title"), QTStr("ConfirmStart.Text"),
 							QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -529,8 +535,6 @@ void OBSBasic::StreamActionTriggered()
 			}
 		}
 
-		bool showChecklist =
-			config_get_bool(App()->GetUserConfig(), "BasicWindow", "StreamingChecklistEnabled");
 		if (showChecklist && isVisible()) {
 			StreamingChecklistDialog checklist(this);
 			if (checklist.exec() != QDialog::Accepted)
