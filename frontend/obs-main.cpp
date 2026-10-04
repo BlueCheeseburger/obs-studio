@@ -549,9 +549,10 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 		program.installTranslator(&translator);
 
 		/* --------------------------------------- */
-		/* check and warn if already running       */
+		/* single instance only: if OBS is already */
+		/* running, silently exit (no prompt, no   */
+		/* window, ignores --multi)                */
 
-		bool cancel_launch = false;
 		bool already_running = false;
 
 #ifdef _WIN32
@@ -559,65 +560,11 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 #endif
 			CheckIfAlreadyRunning(already_running);
 
-		if (!already_running) {
-			goto run;
-		}
-
-		if (!multi) {
-			QMessageBox mb(QMessageBox::Question, QTStr("AlreadyRunning.Title"),
-				       QTStr("AlreadyRunning.Text"));
-			mb.addButton(QTStr("AlreadyRunning.LaunchAnyway"), QMessageBox::YesRole);
-			QPushButton *cancelButton = mb.addButton(QTStr("Cancel"), QMessageBox::NoRole);
-			mb.setDefaultButton(cancelButton);
-
-			/* Don't leave this modal stuck forever if nobody is at the
-			 * keyboard: auto-cancel after 30s of no interaction, same as
-			 * clicking Cancel (the default button). An unattended duplicate
-			 * launch also means nobody is watching the already-running
-			 * instance's tray icon right now, so also clear any flashing
-			 * health-alert tray icon it may be showing. */
-			bool autoTimedOut = false;
-#ifdef _WIN32
-			QTimer::singleShot(30000, &mb, [&autoTimedOut, cancelButton]() {
-				autoTimedOut = true;
-				cancelButton->click();
-			});
-#endif
-
-			mb.exec();
-			cancel_launch = mb.clickedButton() == cancelButton;
-#ifdef _WIN32
-			if (autoTimedOut)
-				SignalClearTrayAlert();
-#endif
-		}
-
-		if (cancel_launch) {
+		if (already_running) {
 			return 0;
 		}
 
-		if (!created_log) {
-			create_log_file(logFile);
-			created_log = true;
-		}
-
-		if (multi) {
-			blog(LOG_INFO, "User enabled --multi flag and is now "
-				       "running multiple instances of OBS.");
-		} else {
-			blog(LOG_WARNING, "================================");
-			blog(LOG_WARNING, "Warning: OBS is already running!");
-			blog(LOG_WARNING, "================================");
-			blog(LOG_WARNING, "User is now running multiple "
-					  "instances of OBS!");
-			/* Clear unclean_shutdown flag as multiple instances
-			 * running from the same config will lead to a
-			 * false-positive detection.*/
-			unclean_shutdown = false;
-		}
-
 		/* --------------------------------------- */
-	run:
 
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__FreeBSD__)
 		// Mounted by termina during chromeOS linux container startup
@@ -1071,7 +1018,7 @@ int main(int argc, char *argv[])
 #if ALLOW_PORTABLE_MODE
 				"--portable, -p: Use portable mode.\n"
 #endif
-				"--multi, -m: Don't warn when launching multiple instances.\n\n"
+				"--multi, -m: Ignored (only one instance of OBS can run).\n\n"
 				"--safe-mode: Run in Safe Mode (disables third-party plugins, scripting, and WebSockets).\n"
 				"--only-bundled-plugins: Only load included (first-party) plugins\n"
 				"--verbose: Make log more verbose.\n"

@@ -336,12 +336,10 @@ RunOnceMutex CheckIfAlreadyRunning(bool &already_running)
 		}
 	}
 
-	HANDLE h = OpenMutexW(SYNCHRONIZE, false, wname.Get());
-	already_running = !!h;
-
-	if (!already_running) {
-		h = CreateMutexW(nullptr, false, wname.Get());
-	}
+	/* Create-and-check in one call so two instances launched at the same
+	 * instant can't both pass an open-then-create race. */
+	HANDLE h = CreateMutexW(nullptr, false, wname.Get());
+	already_running = h && GetLastError() == ERROR_ALREADY_EXISTS;
 
 	RunOnceMutex rom(h ? new RunOnceMutexData(h) : nullptr);
 	return rom;
