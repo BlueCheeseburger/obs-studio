@@ -1521,6 +1521,16 @@ void OBSBasic::applicationShutdown() noexcept
 	obs_hotkey_set_callback_routing_func(nullptr, nullptr);
 	ClearHotkeys();
 
+	/* Detach the recording health monitor's raw taps while the record mix is
+	 * still alive. outputHandler.reset() below drops that mix and releases
+	 * the outputs, whose "stopped" signal is queued and only delivered by the
+	 * sendPostedEvents() further down. By then RecordingStop() would call
+	 * recordingStopped() with tappedVideo pointing at the freed mix and
+	 * crash in video_output_disconnect2(). Idempotent: once detached, the
+	 * late call is a no-op. */
+	if (recordingHealth)
+		recordingHealth->recordingStopped();
+
 	service = nullptr;
 	outputHandler.reset();
 

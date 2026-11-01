@@ -380,6 +380,12 @@ void OBSBasic::RecordingStop(int code, QString last_error)
 		diskFullTimer->stop();
 	}
 
+	/* On shutdown the queued "stopped" signal can be delivered after
+	 * applicationShutdown() has already destroyed the output handler, so
+	 * there is nothing left to remux or deactivate. */
+	if (!outputHandler)
+		return;
+
 	AutoRemux(outputHandler->lastRecordingPath.c_str());
 
 	OnDeactivate();
