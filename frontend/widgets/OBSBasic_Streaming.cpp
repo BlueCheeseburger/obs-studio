@@ -365,6 +365,14 @@ void OBSBasic::StreamingStop(int code, QString last_error)
 		should_reconnect = true;
 	}
 
+	/* Stop any additional multi-stream destinations. The primary output has
+	 * stopped (whether by user action, disconnect, or error), so the
+	 * secondary outputs - which share the primary's encoders - must be torn
+	 * down too. Doing this before any modal error dialogs ensures the
+	 * secondary streams don't keep broadcasting while a dialog is open. */
+	if (multiStreamOutput)
+		multiStreamOutput->Stop();
+
 	switch (code) {
 	case OBS_OUTPUT_BAD_PATH:
 		errorDescription = Str("Output.ConnectFail.BadPath");

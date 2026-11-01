@@ -35,6 +35,8 @@ MultiStreamOutput::~MultiStreamOutput()
 	 * relied on elsewhere in this codebase (e.g. BasicOutputHandler's own
 	 * destructor) that outputs are fully stopped by the time these owning
 	 * objects are torn down. */
+	Stop(true);
+
 	for (auto &dest : destinations) {
 		dest.output = nullptr;
 		dest.service = nullptr;
